@@ -1,4 +1,5 @@
 import { jumpReferrers, bastionUsage } from "./jumpRefs";
+import { catalogVisibility } from "./catalogVisibility.svelte";
 import { credMatches } from "./credFilter";
 import { api, type Folder, type Connection, type CredentialRef, type CredentialFolder, type InheritableSettings } from "./api";
 import { rebalanceEven } from "./paneSplit";
@@ -121,9 +122,13 @@ class TreeStore {
       const [folders, conns] = await Promise.all([
         api.foldersList(),
         api.connectionsList(),
+        catalogVisibility.load(),
       ]);
-      this.folders = folders ?? [];
-      this.connections = conns ?? [];
+      // Catalog folders the user keeps out of their tree (a preference;
+      // they still sync): gone from the tree, search and Quick Connect.
+      const shown = catalogVisibility.filter(folders ?? [], conns ?? []);
+      this.folders = shown.folders;
+      this.connections = shown.connections;
       // Pull the dynamic-folder side data in parallel. Errors swallowed
       // because the feature is optional: a fresh DB has no
       // dynamic_folders rows and the IPC simply returns [].

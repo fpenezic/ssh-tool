@@ -3383,6 +3383,8 @@ A catalog lives on a **catalog server**, a separate self-hosted service that you
 - **Add with a code**: paste a code from the catalog's web page ("Connect ssh-tool"). No browser sign-in is needed on that machine; this is how the Android app adds a catalog.
 - Each machine signs in on its own. Signing out (or **Remove catalog**) ends that machine's session on the server.
 
+**Folders in your tree** (Settings -> Catalogs, or **Hide in my tree** on a catalog folder): untick the catalog folders you do not work with. They leave your tree, search and Quick Connect on all your machines, and come back when you tick them again; they keep syncing meanwhile. This is a view, not access: what you may see is set in the catalog.
+
 Sync runs in the background on an interval and on **Sync now**. The catalog's root folder shows its state: signed out, a sync error, or how many slots still wait for you.
 
 ### Your own credentials, and slots
