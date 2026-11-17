@@ -3416,6 +3416,20 @@ A single connection publishes the same way (right-click -> **Publish to catalog.
 - **Review**: every free-text value that could carry a secret (initial command, environment variables, SSH options, addresses) is listed for review before you can publish, and so is every reference that stays local.
 - **Icon images** go to the catalog when its server takes images (PNG, JPEG or WebP, at most 256 KiB and 1024x1024). One the server would refuse stays yours, with the reason. The server takes a limited number of new images per hour; a large first publish sends the rest in the background, shown in the status bar.
 
+### Matching the connections you already had
+
+If you had these hosts before the catalog arrived, **Match my connections...** in Settings -> Catalogs (under the catalog) pairs your own connections with the catalog's, so you can move over without setting everything up again.
+
+- **Pairing**: same protocol, host name (case and a trailing dot ignored) and port. When several catalog connections fit, the one with your user name wins; otherwise the dialog asks, one by one or with **Prefer a catalog folder** for all of them at once. A second copy of an already paired host stays where it is (**Match this one instead** swaps them). Connections in catalog folders you hid are skipped.
+- **What moves**: your credential, user, network profile, jump host, database and Kafka logins go into My settings of the catalog connection. When the catalog connection uses a slot you have not bound, the slot gets bound instead, which serves every connection using it. Other settings fill in only what the catalog leaves unset; the catalog's own values stay. Notes, tags and icon come over only where the catalog has none. Saved passwords are copied, favourites and recent use carry over.
+- **Forwards**: one the catalog also has (same kind and target) keeps your local port, bookmarks, browser mode and auto start, and your copy of it goes; any other becomes your own forward on the catalog connection.
+- **References**: workspaces, snippets and other connections that jump through the old connection point at the catalog connection.
+- **A value every connection of a catalog folder shares** (for example your user name for one customer) is set once on the folder.
+- **Your copies** move to a **Matched to <catalog>** folder with their settings written onto them, so they still work, and leave Recent and Quick access to the catalog connections. Delete them when you no longer need them.
+- **Large lists** are grouped by catalog folder: tick or untick a whole folder, filter by name, host or folder, and expand only what you want to check. What goes on the folder, and what every matched connection of it gets, shows once on the folder line; the rows show only what differs. **Used in** tells which workspaces, snippets and jump hosts move along.
+- **Undo last match** reverts the last run: your copies go back to their folders and the catalog connections lose what the match gave them. A value you changed since stays as it is, and the result says how many.
+- Profile sync takes the result to your other devices; run the match on one of them.
+
 ### Leaving a catalog
 
 - **Remove catalog** detaches it on this machine. With **Keep its connections as a local folder** ticked, the folders, connections and forwards stay as your own, working as before; slots you had not bound become empty fields, listed after the removal and noted on each connection.
