@@ -53,6 +53,10 @@
   const catRoot = $derived(folder.catalog_id && !folder.remote_uuid ? catalogs.byId(folder.catalog_id) : undefined);
   const catLabel = $derived(catRoot ? catalogStateLabel(catRoot) : null);
   const isCatalogRow = $derived(!!folder.catalog_id);
+  // A catalog row a writer can move (dropped on another folder of the same
+  // catalog, catalogDropKind "move"); the server checks the access again.
+  const catalogMovable = (r: { catalog_id?: string | null; remote_uuid?: string | null; catalog_state?: string; catalog_skeleton?: boolean }, writable: boolean) =>
+    !!r.catalog_id && !!r.remote_uuid && r.catalog_state !== "removed" && !r.catalog_skeleton && writable && !isMobile;
 
   function catRootAction(e: MouseEvent) {
     e.stopPropagation();
@@ -1032,7 +1036,7 @@
     data-kind="folder"
     data-id={folder.id}
     class:skeleton={folder.catalog_skeleton}
-    draggable={!isCatalogRow && !renameState.editing("folder", folder.id)}
+    draggable={(!isCatalogRow || catalogMovable(folder, !!folder.catalog_writable)) && !renameState.editing("folder", folder.id)}
     onmousedown={recordMods}
     onclick={(e) => onFolderRowClick(e)}
     ondblclick={toggle}
@@ -1311,7 +1315,7 @@
           aria-selected={selConn}
           data-kind="connection"
           data-id={conn.id}
-          draggable={!isConn && !conn.catalog_id && !renameState.editing("connection", conn.id)}
+          draggable={!isConn && (!conn.catalog_id || catalogMovable(conn, !!(conn.folder_id && tree.folderById(conn.folder_id)?.catalog_writable))) && !renameState.editing("connection", conn.id)}
           title={rowTitle}
           onmousedown={recordMods}
           onclick={(e) => handleConnClick(e, conn.id, conn.name, conn.hostname)}
