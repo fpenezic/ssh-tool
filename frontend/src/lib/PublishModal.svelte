@@ -157,6 +157,20 @@
   const needsReview = $derived((plan?.free_text.length ?? 0) > 0 && !reviewed);
   const canPublish = $derived(!!plan && !busy && refusals.length === 0 && !needsReview && targetUUID !== null && !result?.unknown);
 
+  // The plan lists folders first, then connections; shown indented, a
+  // connection would sit under whichever folder was listed last. Ordered
+  // by path, each row follows its parent.
+  function treeOrder<T extends { path: string }>(rs: T[]): T[] {
+    const cmp = (a: string, b: string) => {
+      const x = a.split("/"), y = b.split("/");
+      for (let i = 0; i < Math.min(x.length, y.length); i++) {
+        const c = x[i].localeCompare(y[i]);
+        if (c !== 0) return c;
+      }
+      return x.length - y.length;
+    };
+    return [...rs].sort((a, b) => cmp(a.path, b.path));
+  }
   function depth(path: string) {
     return Math.max(0, path.split("/").length - 1);
   }
@@ -283,7 +297,7 @@
           <section>
             <h3>What goes <span class="dim">{counts.folders} folder{counts.folders === 1 ? "" : "s"}, {counts.connections} connection{counts.connections === 1 ? "" : "s"}, {counts.forwards} forward{counts.forwards === 1 ? "" : "s"}</span></h3>
             <ul class="tree">
-              {#each plan.records as r (r.uuid)}
+              {#each treeOrder(plan.records) as r (r.uuid)}
                 {@const probs = problemsByLocal.get(r.local_id || r.name) ?? []}
                 <li style="padding-left: {depth(r.path) * 14}px" class:bad={probs.length > 0}>
                   {#if r.kind === "folders"}<IconFolder size={12} />{:else if r.kind === "connections"}<IconHost size={12} />{:else}<IconTunnel size={12} />{/if}
