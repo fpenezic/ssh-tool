@@ -28,8 +28,9 @@
   let targetUUID = $state<string | null>(null);
   // The last target per catalog, on this machine (a convenience only).
   const targetKey = () => "publish_target_" + catalogId;
-  function lastTarget(): string {
-    try { return localStorage.getItem(targetKey()) ?? ""; } catch { return ""; }
+  // null: nothing remembered; "" is the top level (a new space).
+  function lastTarget(): string | null {
+    try { return localStorage.getItem(targetKey()); } catch { return null; }
   }
   function rememberTarget(v: string) {
     try { localStorage.setItem(targetKey(), v); } catch { /* storage off */ }
@@ -80,10 +81,16 @@
     api.catalogPublishTargets(id).then((t) => {
       if (id !== catalogId) return;
       targets = t;
+      // Preset (a drop) first, then the last one used here, then the top
+      // level where allowed. Never just the first folder by name: that is
+      // some customer's folder, easy to publish into by mistake. A single
+      // connection cannot be a space of its own.
       const last = lastTarget();
+      const top = t.can_create_space && !connId;
       targetUUID = presetTarget && t.targets.some((x) => x.uuid === presetTarget) ? presetTarget
-        : last && t.targets.some((x) => x.uuid === last) ? last
-        : t.targets.length > 0 ? t.targets[0].uuid : t.can_create_space ? "" : null;
+        : last !== null && (last === "" ? top : t.targets.some((x) => x.uuid === last)) ? last
+        : top ? ""
+        : t.targets.length === 1 ? t.targets[0].uuid : null;
     }).catch((e) => (planErr = errMsg(e)));
   });
 
@@ -227,7 +234,7 @@
         <label>Into
           {#if targets && (targets.targets.length > 0 || targets.can_create_space)}
             <FolderTreePicker items={targets.targets.map((t) => ({ value: t.uuid, path: t.path }))} value={targetUUID}
-              extra={targets.can_create_space ? { value: "", path: "New space (top level)" } : null}
+              extra={targets.can_create_space && !connId ? { value: "", path: "New space (top level)" } : null}
               onChange={(v) => { targetUUID = v; rememberTarget(v); }} disabled={busy} />
           {:else if targets}
             <span class="warn-text">You cannot add to any folder of {catName}.</span>
