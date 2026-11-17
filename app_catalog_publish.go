@@ -123,7 +123,7 @@ func catalogSingleConnSupported(ctx context.Context, c *catalog.Client, in Catal
 		return fmt.Errorf("catalog: %v", err)
 	}
 	if m.Protocol.Revision < 3 {
-		return fmt.Errorf("this catalog server cannot take a single connection yet (it needs an update); publish a folder instead")
+		return fmt.Errorf("this catalog server cannot take a single connection (its protocol revision is below 3)")
 	}
 	return nil
 }
