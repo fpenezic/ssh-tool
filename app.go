@@ -1568,15 +1568,15 @@ func (a *App) ConnectionsClone(id string) (*store.Connection, error) {
 		return nil, err
 	}
 	if src.CatalogID != nil {
-		// A copy of a catalog connection is the user's own: at the top
-		// of the tree, with what it inherited from the catalog folded in.
-		folders, err := a.db.ListFolders()
+		// A copy of a catalog connection is the user's own, made the way
+		// "Copy to my connections" makes one (top level, inherited
+		// settings folded in, catalog-made credentials copied, unbound
+		// slots empty).
+		res, err := a.CatalogCopyToLocal("connections", id, "")
 		if err != nil {
 			return nil, err
 		}
-		src.Overrides = resolver.EffectiveOverrides(*src, folders)
-		src.FolderID = nil
-		src.SortOrder = 0
+		return a.db.GetConnection(res.RootID)
 	}
 	c, err := a.db.CreateConnection(store.NewConnection{
 		FolderID:       src.FolderID,

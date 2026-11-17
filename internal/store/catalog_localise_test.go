@@ -192,3 +192,28 @@ func TestCopyCatalogRows(t *testing.T) {
 		t.Fatal("copied into a catalog folder")
 	}
 }
+
+// Keeping a removed connection local gives it its own copy of a
+// catalog-made credential; the catalog's goes with the catalog.
+func TestKeepRemovedConnectionOwnsCredential(t *testing.T) {
+	f, catcred := localiseFixture(t)
+	err := f.db.WithCatalogWriter(func(tx *sql.Tx) error {
+		_, err := tx.Exec(`UPDATE connections SET catalog_state = 'removed' WHERE id = ?`, f.connID)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := f.db.GetConnection(f.connID)
+	if err := f.db.KeepRemovedConnectionLocal(f.connID, c.Overrides); err != nil {
+		t.Fatal(err)
+	}
+	m := overridesOf(t, f.db, f.connID)
+	nid, _ := m["db_credential_ref"].(string)
+	if nid == "" || IsCatalogCredential(nid) {
+		t.Fatalf("still the catalog's credential: %v", m)
+	}
+	if _, err := f.db.GetCredential(catcred); err != nil {
+		t.Fatal("the catalog's own credential went with a single keep")
+	}
+}

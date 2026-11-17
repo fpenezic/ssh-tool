@@ -725,3 +725,69 @@ func jumpConnID(v any) string {
 	}
 	return ""
 }
+
+// credRows names settings rows for ownCredentialsTx.
+type credRows struct {
+	table, col string
+	ids        []string
+}
+
+// ownCredentialsTx gives the rows of a keep (a removed row kept local)
+// ordinary copies of the catalog-made credentials their settings name,
+// one per credential across all the rows, and rewrites the references in
+// place: the catalog's own credential goes when the catalog does.
+func (d *DB) ownCredentialsTx(tx *sql.Tx, catID string, groups ...credRows) error {
+	var catName string
+	if err := tx.QueryRow(`SELECT name FROM catalogs WHERE id = ?`, catID).Scan(&catName); err != nil {
+		return err
+	}
+	in := func(ids []string) (string, []any) {
+		args := make([]any, len(ids))
+		for i, id := range ids {
+			args[i] = id
+		}
+		return strings.TrimSuffix(strings.Repeat("?,", len(ids)), ","), args
+	}
+	var all []string
+	for _, g := range groups {
+		if len(g.ids) == 0 {
+			continue
+		}
+		ph, args := in(g.ids)
+		rows, err := tx.Query(`SELECT IFNULL(`+g.col+`, '') FROM `+g.table+` WHERE id IN (`+ph+`)`, args...)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var j string
+			if err := rows.Scan(&j); err != nil {
+				rows.Close()
+				return err
+			}
+			all = append(all, j)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+	}
+	l := &localiser{catID: catID, slotName: map[string]string{}, creds: map[string]string{}, jumps: map[string]string{}}
+	if _, err := l.ordinaryCredentials(tx, catName, all, false); err != nil {
+		return err
+	}
+	for old, nid := range l.creds {
+		o, _ := json.Marshal(old)
+		n, _ := json.Marshal(nid)
+		for _, g := range groups {
+			if len(g.ids) == 0 {
+				continue
+			}
+			ph, args := in(g.ids)
+			if _, err := tx.Exec(`UPDATE `+g.table+` SET `+g.col+` = replace(`+g.col+`, ?, ?) WHERE id IN (`+ph+`)`,
+				append([]any{string(o), string(n)}, args...)...); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
