@@ -763,6 +763,7 @@ func (a *App) buildMcpServer() *mcp.Server {
 	}, &mcp.ServerOptions{
 		Instructions: mcpprompt.Text(),
 	})
+	server.AddReceivingMiddleware(mcpArgsDiag)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "list_sessions",
