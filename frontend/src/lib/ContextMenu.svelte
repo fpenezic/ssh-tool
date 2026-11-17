@@ -46,15 +46,32 @@
       returnFocus = null;
     };
   });
+  // Close on a press anywhere outside the menu, and let that press do
+  // what it does: a full-window backdrop used to swallow it, so the first
+  // click on a tab or a toolbar only closed the menu (and on the window's
+  // drag region, the title bar tabs, it did not even get that).
+  $effect(() => {
+    if (!contextMenu.open) return;
+    const outside = (e: Event) => {
+      if (menuEl && e.target instanceof Node && menuEl.contains(e.target)) return;
+      contextMenu.close();
+    };
+    // Registered after the press that opened the menu (the menu opens on
+    // contextmenu or click, both after their pointerdown).
+    const onDown = (e: PointerEvent) => outside(e);
+    const onBlur = () => contextMenu.close();
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("resize", onBlur);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("resize", onBlur);
+    };
+  });
 </script>
 
 {#if contextMenu.open}
-  <div
-    class="backdrop"
-    role="presentation"
-    onclick={() => contextMenu.close()}
-    oncontextmenu={(e) => { e.preventDefault(); contextMenu.close(); }}
-  ></div>
   <div
     class="menu"
     bind:this={menuEl}
@@ -85,10 +102,6 @@
 {/if}
 
 <style>
-  .backdrop {
-    position: fixed; inset: 0;
-    z-index: 70;
-  }
   .menu {
     position: fixed;
     background: var(--crust);
