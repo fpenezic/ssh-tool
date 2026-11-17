@@ -2,7 +2,7 @@
 
 The DB lives at `DataDir/store.db` (SQLite via `modernc.org/sqlite`,
 WAL mode, foreign keys on). Schema is versioned in `schema_meta.value`
-and migrated in order on every startup. Current head: **v31**. The audit log lives in a separate audit.db (machine-local, not in this schema).
+and migrated in order on every startup. Current head: **v32**. The audit log lives in a separate audit.db (machine-local, not in this schema).
 
 The canonical migration source is `internal/store/migrations.go`. This
 doc summarises the current shape and lists each migration's purpose.
@@ -254,6 +254,7 @@ the network profile to dial the server through, empty meaning direct.
   column stays and is written as 0.
 - v29: shared catalogs. `catalogs` (one per attached catalog: server, cursor, account, root folder), `catalog_slots` (slots as last synced), `catalog_bindings` (this user's slot to local id), `catalog_overrides` (the user's own layer per record, including the `_record` part for notes, tags and icons). Folders, connections and port_forwards gain `catalog_id`, `remote_uuid`, `remote_rev`, `catalog_json` and `catalog_state`; triggers refuse changes to catalog-owned rows outside the catalog writer (gotcha 162).
 - v30: `catalog_publish_pending` - the client-generated uuids of a publish, recorded before the request so a publish the server accepted but the app never finished is completed in place by the next sync.
+- v32: `catalog_publish_pending.extra_json` - the record's local layer and (on the first row) the bindings of a publish, so a publish whose answer was lost is finished with the publisher's side intact.
 - v31: `images.sha256` - catalog icon images are addressed by SHA-256; the column maps an address to the local row with those bytes (backfilled on the first miss).
 
 ### `audit_events` (v13, separate DB)
@@ -340,6 +341,7 @@ Vault keys for various features:
 | 29 | shared catalogs: catalogs, catalog_slots, catalog_bindings, catalog_overrides; catalog columns and guard triggers on folders, connections, port_forwards |
 | 30 | catalog_publish_pending (publish recorded before the request) |
 | 31 | images.sha256 (catalog icon images by address) |
+| 32 | catalog_publish_pending.extra_json (layer and bindings of an unfinished publish) |
 
 Migration runner: `runMigrations` in `internal/store/migrations.go`.
 Each migration applies inside a transaction; failure rolls back and

@@ -2,6 +2,8 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -17,6 +19,15 @@ type PublishPending struct {
 	Kind       string // folders | connections | forwards
 	RemoteUUID string
 	LocalID    string
+	// Extra: what the publisher's side gets when the feed converts the
+	// row (PublishPendingExtra as JSON); "" for none.
+	Extra string
+}
+
+// PublishPendingExtra is a pending row's publisher-side state.
+type PublishPendingExtra struct {
+	Layer    *CatalogOverride `json:"layer,omitempty"`
+	Bindings []CatalogBinding `json:"bindings,omitempty"`
 }
 
 // RecordPublishPending records a publish before it is sent.
@@ -27,8 +38,8 @@ func (d *DB) RecordPublishPending(catalogID string, rows []PublishPending) error
 			if _, ok := catalogKindTable[r.Kind]; !ok {
 				return fmt.Errorf("publish: unknown kind %q", r.Kind)
 			}
-			if _, err := tx.Exec(`INSERT INTO catalog_publish_pending (catalog_id, kind, remote_uuid, local_id, created_at)
-				VALUES (?, ?, ?, ?, ?)`, catalogID, r.Kind, r.RemoteUUID, r.LocalID, ts); err != nil {
+			if _, err := tx.Exec(`INSERT INTO catalog_publish_pending (catalog_id, kind, remote_uuid, local_id, created_at, extra_json)
+				VALUES (?, ?, ?, ?, ?, ?)`, catalogID, r.Kind, r.RemoteUUID, r.LocalID, ts, r.Extra); err != nil {
 				return err
 			}
 		}
@@ -80,6 +91,36 @@ func (d *DB) PendingPublishTx(tx *sql.Tx, catalogID string) (map[string]PublishP
 		out[p.RemoteUUID] = p
 	}
 	return out, rows.Err()
+}
+
+// ApplyPublishPendingExtraTx writes a converted pending row's
+// publisher-side state (its layer, the bindings it carries), as a
+// completed publish would have.
+func (d *DB) ApplyPublishPendingExtraTx(tx *sql.Tx, catalogID, uuid string) error {
+	var raw string
+	err := tx.QueryRow(`SELECT extra_json FROM catalog_publish_pending WHERE catalog_id = ? AND remote_uuid = ?`, catalogID, uuid).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) || raw == "" {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var x PublishPendingExtra
+	if err := json.Unmarshal([]byte(raw), &x); err != nil {
+		return nil // unreadable: the row converts without it
+	}
+	// What does not check out is left out: it must not stop the sync.
+	var bindings []CatalogBinding
+	for _, b := range x.Bindings {
+		if validBindingKind(b.Kind) && b.SlotUUID != "" && b.TargetID != "" {
+			bindings = append(bindings, b)
+		}
+	}
+	var layers []CatalogOverride
+	if x.Layer != nil && validOverrideKind(x.Layer.Kind) && x.Layer.RemoteUUID != "" {
+		layers = append(layers, *x.Layer)
+	}
+	return writeBindingsAndLayersTx(tx, catalogID, bindings, layers)
 }
 
 // SettlePublishPendingTx removes the pending rows of uuids (converted, or
@@ -154,28 +195,7 @@ func (d *DB) CompletePublishTx(tx *sql.Tx, catalogID string, rows []PublishedRow
 			return err
 		}
 	}
-	ts := now()
-	for _, b := range bindings {
-		if !validBindingKind(b.Kind) || b.SlotUUID == "" || b.TargetID == "" {
-			return fmt.Errorf("publish: invalid binding %+v", b)
-		}
-		if _, err := tx.Exec(`INSERT INTO catalog_bindings (catalog_id, slot_uuid, kind, target_id, updated_at) VALUES (?, ?, ?, ?, ?)
-			ON CONFLICT (catalog_id, slot_uuid) DO UPDATE SET kind = excluded.kind, target_id = excluded.target_id,
-			  updated_at = excluded.updated_at`, catalogID, b.SlotUUID, b.Kind, b.TargetID, ts); err != nil {
-			return err
-		}
-	}
-	for _, o := range layers {
-		if !validOverrideKind(o.Kind) {
-			return fmt.Errorf("publish: invalid layer kind %q", o.Kind)
-		}
-		if _, err := tx.Exec(`INSERT INTO catalog_overrides (catalog_id, remote_uuid, kind, json, updated_at) VALUES (?, ?, ?, ?, ?)
-			ON CONFLICT (catalog_id, remote_uuid) DO UPDATE SET kind = excluded.kind, json = excluded.json,
-			  updated_at = excluded.updated_at`, catalogID, o.RemoteUUID, o.Kind, o.JSON, ts); err != nil {
-			return err
-		}
-	}
-	return nil
+	return writeBindingsAndLayersTx(tx, catalogID, bindings, layers)
 }
 
 // CatalogLocalID is the local row of a catalog record ("" when not held).
@@ -209,4 +229,31 @@ func (d *DB) CatalogFolderOf(kind, id string) (localID, remoteUUID, raw string, 
 	var u sql.NullString
 	err = d.conn.QueryRow(`SELECT remote_uuid, COALESCE(catalog_json, '') FROM folders WHERE id = ?`, fid).Scan(&u, &raw)
 	return fid, u.String, raw, err
+}
+
+// writeBindingsAndLayersTx stores a publish's bindings and the
+// publisher's local layers.
+func writeBindingsAndLayersTx(tx *sql.Tx, catalogID string, bindings []CatalogBinding, layers []CatalogOverride) error {
+	ts := now()
+	for _, b := range bindings {
+		if !validBindingKind(b.Kind) || b.SlotUUID == "" || b.TargetID == "" {
+			return fmt.Errorf("publish: invalid binding %+v", b)
+		}
+		if _, err := tx.Exec(`INSERT INTO catalog_bindings (catalog_id, slot_uuid, kind, target_id, updated_at) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (catalog_id, slot_uuid) DO UPDATE SET kind = excluded.kind, target_id = excluded.target_id,
+			  updated_at = excluded.updated_at`, catalogID, b.SlotUUID, b.Kind, b.TargetID, ts); err != nil {
+			return err
+		}
+	}
+	for _, o := range layers {
+		if !validOverrideKind(o.Kind) {
+			return fmt.Errorf("publish: invalid layer kind %q", o.Kind)
+		}
+		if _, err := tx.Exec(`INSERT INTO catalog_overrides (catalog_id, remote_uuid, kind, json, updated_at) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (catalog_id, remote_uuid) DO UPDATE SET kind = excluded.kind, json = excluded.json,
+			  updated_at = excluded.updated_at`, catalogID, o.RemoteUUID, o.Kind, o.JSON, ts); err != nil {
+			return err
+		}
+	}
+	return nil
 }
