@@ -1299,6 +1299,8 @@ export interface PublishPlan {
   /** Uploaded icons, one per distinct image; kept ones stay local, with why. */
   images: PublishPlanImage[];
   review_hash: string;
+  /** Settings the target sets and the published folder does not (it inherits them after the publish). */
+  target_inherits: string[];
   /** References not sent (local credentials, networks, inventory bastions, missing ones), with why. */
   kept_local: { kind: string; name: string; field: string; reason: string }[];
   root_uuid: string;
