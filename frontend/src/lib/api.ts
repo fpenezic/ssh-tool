@@ -1250,6 +1250,8 @@ export type OpksshCertLifetime = {
 export type CatalogState = "ok" | "syncing" | "no_login" | "signed_out" | "error" | "locked" | "signing_in" | "waiting";
 
 export interface CatalogInfo {
+  // The catalog's own icon (its root folder's image), absent for none.
+  icon_image_id?: string;
   id: string;
   name: string;
   base_url: string;

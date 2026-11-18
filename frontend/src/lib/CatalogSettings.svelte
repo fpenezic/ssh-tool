@@ -6,6 +6,7 @@
   import SearchableSelect from "./SearchableSelect.svelte";
   import CatalogFolderVisibility from "./CatalogFolderVisibility.svelte";
   import CatalogMatchModal from "./CatalogMatchModal.svelte";
+  import Icon from "./Icon.svelte";
   import { showConfirm, showConfirmWithCheckbox } from "./confirmModal.svelte.ts";
   import { catalogLocal } from "./catalogLocal.svelte";
   import { toast } from "./toast.svelte.ts";
@@ -286,7 +287,7 @@
     <div class="cat-row">
       <div class="cat-head">
         <button class="cat-toggle" onclick={() => toggle(c.id)} aria-expanded={open === c.id}>
-          <span class="cat-name">{c.name}</span>
+          <span class="cat-name">{#if c.icon_image_id}<span class="cat-icon"><Icon imageId={c.icon_image_id} iconName={null} iconColor={null} size={16} /></span>{/if}{c.name}</span>
           <span class="cat-url">{c.base_url}</span>
         </button>
         {#if st.text}<span class="chip tone-{st.tone}">{st.text}</span>{/if}
@@ -419,7 +420,8 @@
   .cat-row { padding: 8px 10px; border: 1px solid var(--border, #333); border-radius: var(--r-md); }
   .cat-head { display: flex; align-items: center; gap: 8px; }
   .cat-toggle { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; background: none; border: none; padding: 0; min-width: 0; flex: 1; text-align: left; cursor: pointer; }
-  .cat-name { font-weight: 600; }
+  .cat-name { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+  .cat-icon { display: inline-flex; }
   .cat-url { font-size: var(--fs-sm); opacity: 0.7; overflow: hidden; text-overflow: ellipsis; }
   .cat-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .cat-actions button { display: inline-flex; align-items: center; gap: 4px; }

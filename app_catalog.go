@@ -177,6 +177,9 @@ type CatalogInfo struct {
 	Slots   int    `json:"slots"`
 	Unbound int    `json:"unbound"`
 	Removed int    `json:"removed"`
+	// IconImageID: the catalog's own icon (its root folder's image), ""
+	// for none.
+	IconImageID string `json:"icon_image_id,omitempty"`
 }
 
 func (a *App) catalogInfo(c store.Catalog) CatalogInfo {
@@ -210,6 +213,9 @@ func (a *App) catalogInfo(c store.Catalog) CatalogInfo {
 			info.State = catStateOK
 		}
 	}
+	var icon sql.NullString
+	_ = a.db.Conn().QueryRow(`SELECT icon_image_id FROM folders WHERE id = ?`, c.RootFolderID).Scan(&icon)
+	info.IconImageID = icon.String
 	slots, _ := a.db.ListCatalogSlots(c.ID)
 	info.Slots = len(slots)
 	for _, s := range a.catalogSlotInfos(c.ID, slots) {
@@ -272,6 +278,7 @@ func (a *App) CatalogAdd(baseURL string) (*CatalogInfo, error) {
 	}
 	a.recordAudit("catalog.add", cat.ID, map[string]string{"base_url": u})
 	EventsEmit("catalog_changed", map[string]any{"catalog_id": cat.ID})
+	go a.catalogIconPass(cat)
 	info := a.catalogInfo(*cat)
 	if err := a.CatalogSignIn(cat.ID); err != nil {
 		info = a.catalogInfo(*cat)
@@ -555,6 +562,29 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 	return err
 }
 
+// catalogIconPass brings the catalog's own icon (server.icon, revision 5)
+// in step: anonymous, so it also runs before a sign-in (on Add). Failures
+// only log; the next pass tries again.
+func (a *App) catalogIconPass(cat *store.Catalog) {
+	c, err := a.catalogClient(cat)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	changed, err := catalog.SyncServerIcon(ctx, a.db, cat, c)
+	if err != nil {
+		log.Printf("catalog %s: server icon: %v", cat.Name, err)
+		return
+	}
+	if changed {
+		if _, err := catalog.PruneImages(a.db); err != nil {
+			log.Printf("catalog: prune images: %v", err)
+		}
+		EventsEmit("catalog_changed", map[string]any{"catalog_id": cat.ID})
+	}
+}
+
 // catalogImagesPass fetches the icon images the catalog's records name and
 // this machine lacks, materialises again when any arrived, and drops
 // cached images nothing uses any more. Failures only log: the rows show
@@ -562,6 +592,7 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 func (a *App) catalogImagesPass(cat *store.Catalog, c *catalog.Client) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	a.catalogIconPass(cat)
 	n, err := catalog.FetchImages(ctx, a.db, cat.ID, c)
 	if err != nil {
 		log.Printf("catalog %s: images: %v", cat.Name, err)

@@ -3375,6 +3375,8 @@ pinned connections in the same folder are untouched.
 
 A **catalog** is a connection tree your team shares. Its folders, connections and port forwards show up in your tree under the catalog's root folder and stay in step with it: when a colleague adds a host or changes a port, your tree follows on the next sync. Secrets are never shared. A credential from someone's own vault and a network (VPN) profile are not part of the catalog: you set your own under **My settings** on a catalog folder or connection, like any setting, and the folders below inherit it. The catalog's notes are the place to say which credential a folder needs. Only a credential everyone can reach the same way, a **Bitwarden / Vaultwarden** item or opkssh, goes into the catalog, as a **slot**.
 
+If the catalog server has an icon of its own, it shows next to the catalog's name in Settings -> Catalogs and on the catalog's folder in the tree, before you sign in as well.
+
 A catalog lives on a **catalog server**, a separate self-hosted service that your team or company runs. The server is not part of this repository and is not open source at this time; ssh-tool is the client. Ask whoever runs it for the catalog's address, or for a code from its web page.
 
 ### Adding a catalog

@@ -381,3 +381,28 @@ func (d *DB) DeleteCatalogOverride(catalogID, remoteUUID string) error {
 	_, err := d.conn.Exec(`DELETE FROM catalog_overrides WHERE catalog_id = ? AND remote_uuid = ?`, catalogID, remoteUUID)
 	return err
 }
+
+// CatalogRootIconSHA256 is the hash of the image a catalog's root folder
+// shows (the catalog's own icon), "" for none.
+func (d *DB) CatalogRootIconSHA256(rootID string) (string, error) {
+	var h sql.NullString
+	err := d.conn.QueryRow(`SELECT i.sha256 FROM folders f JOIN images i ON i.id = f.icon_image_id WHERE f.id = ?`, rootID).Scan(&h)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return h.String, nil
+}
+
+// SetCatalogRootIcon sets (nil clears) the image of a catalog's root
+// folder. The root is the catalog's, so the write goes through the
+// catalog writer.
+func (d *DB) SetCatalogRootIcon(rootID string, imageID *string) error {
+	return d.WithCatalogWriter(func(tx *sql.Tx) error {
+		_, err := tx.Exec(`UPDATE folders SET icon_image_id = ?, icon_name = NULL, icon_color = NULL, updated_at = ? WHERE id = ? AND catalog_id IS NOT NULL`,
+			imageID, now(), rootID)
+		return err
+	})
+}

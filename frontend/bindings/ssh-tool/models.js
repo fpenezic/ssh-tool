@@ -1524,6 +1524,15 @@ export class CatalogInfo {
              */
             this["removed"] = 0;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * IconImageID: the catalog's own icon (its root folder's image), ""
+             * for none.
+             * @member
+             * @type {string | undefined}
+             */
+            this["icon_image_id"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
