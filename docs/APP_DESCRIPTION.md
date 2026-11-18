@@ -7,7 +7,7 @@ Pick the length that fits the surface.
 
 ## One-liner (200 chars or less)
 
-> SSH manager for sysadmins with hundreds of hosts: inherited folder tree, encrypted vault, split-pane terminal, VPN profiles, dynamic inventory, Kafka and Database tabs, RDM import.
+> SSH manager for sysadmins with hundreds of hosts: inherited folder tree, shared team catalogs, encrypted vault, split-pane terminal, VPN profiles, dynamic inventory, Kafka and Database tabs.
 
 ---
 
@@ -24,6 +24,8 @@ A tree of connections with folder-level inherited settings, an encrypted credent
 **ssh-tool** is a desktop SSH connection manager built for sysadmins who maintain hundreds of hosts. Cross-platform (Wails v3 + Svelte 5), a single binary, native multi-window with tab detach / redock; Android on the same Go core.
 
 **Connection tree** - folder hierarchy with inherited settings (username, port, credential, jump host chain, network profile, colour tag, auto-reconnect, keepalive). Tags, a fast filter, a fuzzy palette, multi-select with a tri-state batch editor.
+
+**Shared catalogs** - a team's connection tree from a self-hosted catalog server, synced to every machine; no secret is shared: each person sets their own credentials or binds a Bitwarden / Vaultwarden item once. Publish a folder or a single connection after a review of what goes, hide the folders you do not work with, and match connections you already had onto the catalog's.
 
 **Credentials** - Argon2id + XChaCha20-Poly1305 vault with an optional machine-bound auto-unlock and idle auto-lock; password, key, agent and opkssh kinds; secrets read from KeePass, Bitwarden / Vaultwarden or Infisical at connect time, and TOTP codes answering SSH and VPN prompts.
 
@@ -51,6 +53,14 @@ A tree of connections with folder-level inherited settings, an encrypted credent
 - **Multi-select + batch editor** - tri-state per field
   (leave / inherit / set). Connect-all, run-command-on-all, move-to,
   bulk delete.
+
+### Shared catalogs
+
+- **One tree for the team** - folders, connections and forwards from a self-hosted catalog server appear under the catalog's folder and follow it on every sync; sign in through the browser or with a one-time code.
+- **Secrets stay personal** - vault credentials and VPN profiles are never sent; colleagues set their own under My settings, or bind a Bitwarden / Vaultwarden item or opkssh slot once for every connection that uses it.
+- **Publish with a review** - a folder or a single connection (right-click or drag), with every free-text value shown before it goes and a choice of what to send.
+- **Your view, your settings** - hide catalog folders you do not work with; local changes (port, user, notes, icon) stay yours and can be reset; writers edit the record for everyone.
+- **Move over without retyping** - "Match my connections" pairs the connections you already had with the catalog's by host and port and moves your credentials, logins, forwards and workspaces onto them; your copies are kept and one Undo puts it back.
 
 ### Secure credential vault
 

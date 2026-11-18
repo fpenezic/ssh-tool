@@ -150,6 +150,11 @@
       "body": "Manage 300+ connections in nested folders. Credentials, jump hosts, and SSH options cascade down. Drag & drop, multi-select, Ctrl+K quick palette."
     },
     {
+      "icon": "tree",
+      "title": "Shared catalogs for the team",
+      "body": "One connection tree from a self-hosted catalog server, synced to every machine. Secrets never travel: each person sets their own credentials or binds a Bitwarden item once. Publish with a review, hide what you do not use, match the connections you already had."
+    },
+    {
       "icon": "globe",
       "title": "Dynamic inventory",
       "body": "Auto-populated folders that pull live from Proxmox VE, Hetzner Cloud, DigitalOcean, Linode, Vultr, Scaleway, AWS EC2 and Ansible files. Tag/label filters, hide-stopped, on-demand refresh, pin-one-host, convert-folder-to-static."

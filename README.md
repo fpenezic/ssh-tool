@@ -16,6 +16,7 @@ build of your own (see below).
 
 - **Connection tree** with folder-level inherited settings, tags,
   multi-select batch editor.
+- **Shared catalogs** - a connection tree your team shares from a self-hosted catalog server, kept in step on every machine; secrets are never shared (each person sets their own credentials, or binds a Bitwarden / Vaultwarden item once), publish a folder or a connection with a review of what goes, show only the folders you work with, and match the connections you already had onto the catalog's.
 - **Encrypted credential vault** - Argon2id + XChaCha20-Poly1305,
   file-only persistence with an optional machine-bound auto-unlock
   sidecar (no OS keychain), idle auto-lock,
