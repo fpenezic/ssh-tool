@@ -2846,6 +2846,16 @@ export class CatalogSlotInfo {
              */
             this["skipped"] = undefined;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Covered: unbound, but no catalog connection uses it any more: each
+             * one that names it has the user's own value (My settings) in its
+             * place. Nothing to bind; binding would still serve new records.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["covered"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
