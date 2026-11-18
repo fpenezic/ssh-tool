@@ -6,8 +6,9 @@
 // the place that fixes it, rendered by IssuesPanel.
 //
 // Sources: desktop integration problems (desktopAlerts), credentials
-// with a user-set expiry inside the warning window, and opkssh certs
-// running out of their lifetime. Conditions that persist until fixed -
+// with a user-set expiry inside the warning window, opkssh certs
+// running out of their lifetime, and catalogs that cannot sync (out of
+// reach, signed out) - listed while it lasts, gone after a good pass. Conditions that persist until fixed -
 // anything transient belongs in a toast.
 
 import { api, type OpksshCertLifetime } from "./api";
@@ -16,6 +17,7 @@ import { desktopAlerts } from "./desktopAlerts.svelte";
 import { expiringCredentials, opksshExpiry } from "./credExpiry";
 import { toast } from "./toast.svelte.ts";
 import { errMsg } from "./connectErrors";
+import { catalogs } from "./catalog.svelte";
 
 export type IssueSeverity = "warn" | "error";
 
@@ -125,6 +127,18 @@ class IssuesStore {
           : `The opkssh certificate has ${left}% of its lifetime left. Once it runs out, the next connect opens the browser to sign in.`,
         actionLabel: "Open credential", action: () => openCredential(o.credential_id),
         opkssh: { credentialId: o.credential_id, name: o.name },
+      });
+    }
+    for (const c of catalogs.troubled) {
+      const signedOut = c.state === "signed_out";
+      out.push({
+        id: `catalog:${c.id}`,
+        severity: signedOut ? "error" : "warn",
+        title: signedOut ? `${c.name}: signed out` : `${c.name}: cannot sync`,
+        detail: signedOut
+          ? "The catalog ended this machine's session. Its connections keep working as last synced; sign in again to get changes."
+          : `${c.error || c.last_error || "The catalog server did not answer"}. Its connections keep working as last synced; the sync retries on its own.`,
+        actionLabel: "Open catalog", action: () => catalogs.open(c.id, ""),
       });
     }
     // Errors first; the order inside each group is the sources' own.

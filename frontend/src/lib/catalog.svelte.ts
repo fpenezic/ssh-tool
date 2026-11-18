@@ -112,25 +112,27 @@ class CatalogStore {
     view.setTabSettingsSection("catalogs");
   }
 
-  // One toast per catalog and reason per session: a dead session, a
-  // failing sync. Background work stays visible without a modal. Unbound
-  // slots get no toast: the connect dialog asks for them when a connection
-  // needs them (catalogBindGate), and the root's chip is the standing hint.
+  // A failing sync (server out of reach, VPN down) is no toast: it shows in
+  // the status bar's issues badge (issues.svelte.ts) for as long as it
+  // lasts and goes away with the next good pass, however often the sync
+  // runs. A dead session needs the user, so it also gets one toast per
+  // session. Unbound slots get none: the connect dialog asks for them when
+  // a connection needs them (catalogBindGate), and the root's chip is the
+  // standing hint.
   private attention() {
     for (const c of this.list) {
-      let key = "";
-      let msg = "";
-      if (c.state === "signed_out") {
-        key = c.id + ":signed_out";
-        msg = isMobile ? `${c.name}: signed out - sign in again with a code from the catalog` : `${c.name}: signed out - click to sign in again`;
-      } else if (c.state === "error") {
-        key = c.id + ":error";
-        msg = `${c.name}: sync failed - ${c.error || c.last_error || "see Settings"}`;
-      }
-      if (!key || this.notified.has(key)) continue;
+      if (c.state !== "signed_out") continue;
+      const key = c.id + ":signed_out";
+      if (this.notified.has(key)) continue;
       this.notified.add(key);
+      const msg = isMobile ? `${c.name}: signed out - sign in again with a code from the catalog` : `${c.name}: signed out - click to sign in again`;
       toast.push("err", msg, 10000, () => this.open(c.id, ""));
     }
+  }
+
+  /** Catalogs whose last pass failed or whose session ended, for the issues badge. */
+  get troubled(): CatalogInfo[] {
+    return this.list.filter((c) => c.state === "error" || c.state === "signed_out");
   }
 }
 
