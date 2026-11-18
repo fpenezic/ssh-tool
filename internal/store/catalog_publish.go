@@ -260,3 +260,17 @@ func writeBindingsAndLayersTx(tx *sql.Tx, catalogID string, bindings []CatalogBi
 	}
 	return nil
 }
+
+// CatalogLocalRowState is CatalogLocalID with the row's catalog state
+// ("" for a live record, "removed" for one that left the catalog).
+func (d *DB) CatalogLocalRowState(catalogID, kind, remoteUUID string) (id, state string, err error) {
+	t, ok := catalogKindTable[kind]
+	if !ok {
+		return "", "", fmt.Errorf("unknown kind %q", kind)
+	}
+	err = d.conn.QueryRow(`SELECT id, catalog_state FROM `+t+` WHERE catalog_id = ? AND remote_uuid = ?`, catalogID, remoteUUID).Scan(&id, &state)
+	if err == sql.ErrNoRows {
+		return "", "", nil
+	}
+	return id, state, err
+}

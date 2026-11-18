@@ -118,7 +118,7 @@ func TestIntegrationRecordEditing(t *testing.T) {
 	a := &App{db: db, vault: v}
 	bobTok := itToken(t, base, "bob")
 	code := itAPI(t, base, bobTok, "POST", "/api/v1/enrollments", "", nil)["code"].(string)
-	info, err := a.CatalogEnrollConfirm(base, code, false)
+	info, err := a.CatalogEnrollConfirm(base, code, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestIntegrationSaveOnFolder(t *testing.T) {
 	}
 	bobTok := itToken(t, base, "bob")
 	code := itAPI(t, base, bobTok, "POST", "/api/v1/enrollments", "", nil)["code"].(string)
-	info, err := a.CatalogEnrollConfirm(base, code, false)
+	info, err := a.CatalogEnrollConfirm(base, code, false, "")
 	must(err)
 	catID := info.ID
 	cat, _ := db.GetCatalog(catID)

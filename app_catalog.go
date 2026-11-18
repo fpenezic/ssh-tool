@@ -36,14 +36,15 @@ import (
 
 // Catalog states, as the frontend shows them on the catalog's root row.
 const (
-	catStateOK       = "ok"         // synced
-	catStateSyncing  = "syncing"    // a pass is running
-	catStateNoLogin  = "no_login"   // never signed in on this machine (rows came through profile sync)
-	catStateSignedOU = "signed_out" // the server ended the session; sign in again
-	catStateError    = "error"      // the last pass failed (network, server); retried
-	catStateLocked   = "locked"     // the vault is locked: no token, no sync
-	catStateSignIn   = "signing_in" // a browser sign-in is waiting
-	catStateWaiting  = "waiting"    // waits for a newer profile to be pulled first
+	catStateOK       = "ok"          // synced
+	catStateSyncing  = "syncing"     // a pass is running
+	catStateNoLogin  = "no_login"    // never signed in on this machine (rows came through profile sync)
+	catStateSignedOU = "signed_out"  // the server ended the session; sign in again
+	catStateError    = "error"       // the last pass failed (network, server); retried
+	catStateLocked   = "locked"      // the vault is locked: no token, no sync
+	catStateSignIn   = "signing_in"  // a browser sign-in is waiting
+	catStateWaiting  = "waiting"     // waits for a newer profile to be pulled first
+	catStateVPN      = "waiting_vpn" // a background pass found the catalog's VPN down
 )
 
 const catWaitingMsg = "another machine changed the profile; the catalog syncs after it is pulled"
@@ -144,6 +145,8 @@ func (a *App) catalogClient(cat *store.Catalog) (*catalog.Client, error) {
 		return nil, err
 	}
 	c.DeviceName = catalogDeviceName()
+	id := cat.ID
+	c.HTTP = a.catalogHTTPClient(func() string { return a.catalogNetwork(id) })
 	rt.clients[cat.ID] = c
 	return c, nil
 }
@@ -180,6 +183,9 @@ type CatalogInfo struct {
 	// IconImageID: the catalog's own icon (its root folder's image), ""
 	// for none.
 	IconImageID string `json:"icon_image_id,omitempty"`
+	// NetworkProfileID: the network profile the catalog's traffic goes
+	// through, "" for direct.
+	NetworkProfileID string `json:"network_profile_id"`
 }
 
 func (a *App) catalogInfo(c store.Catalog) CatalogInfo {
@@ -216,6 +222,7 @@ func (a *App) catalogInfo(c store.Catalog) CatalogInfo {
 	var icon sql.NullString
 	_ = a.db.Conn().QueryRow(`SELECT icon_image_id FROM folders WHERE id = ?`, c.RootFolderID).Scan(&icon)
 	info.IconImageID = icon.String
+	info.NetworkProfileID = a.catalogNetwork(c.ID)
 	slots, _ := a.db.ListCatalogSlots(c.ID)
 	info.Slots = len(slots)
 	for _, s := range a.catalogSlotInfos(c.ID, slots) {
@@ -244,7 +251,7 @@ func (a *App) CatalogList() ([]CatalogInfo, error) {
 // CatalogAdd attaches a catalog by its base URL and starts the browser
 // sign-in (an explicit user action). The catalog stays attached when the
 // sign-in is cancelled or fails; Sign in tries again.
-func (a *App) CatalogAdd(baseURL string) (*CatalogInfo, error) {
+func (a *App) CatalogAdd(baseURL, networkProfileID string) (*CatalogInfo, error) {
 	u, err := catalog.ValidateBaseURL(baseURL)
 	if err != nil {
 		return nil, err
@@ -253,6 +260,7 @@ func (a *App) CatalogAdd(baseURL string) (*CatalogInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.useCatalogNetwork(probe, networkProfileID)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	meta, err := probe.Meta(ctx)
 	cancel()
@@ -276,9 +284,10 @@ func (a *App) CatalogAdd(baseURL string) (*CatalogInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.saveCatalogNetwork(cat, networkProfileID)
 	a.recordAudit("catalog.add", cat.ID, map[string]string{"base_url": u})
 	EventsEmit("catalog_changed", map[string]any{"catalog_id": cat.ID})
-	go a.catalogIconPass(cat)
+	go a.catalogIconPass(cat, false)
 	info := a.catalogInfo(*cat)
 	if err := a.CatalogSignIn(cat.ID); err != nil {
 		info = a.catalogInfo(*cat)
@@ -512,7 +521,11 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 	if perr != nil {
 		log.Printf("catalog %s: external references: %v", cat.Name, perr)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	base := context.Background()
+	if background {
+		base = catalogBackground(base)
+	}
+	ctx, cancel := context.WithTimeout(base, 5*time.Minute)
 	res, err := catalog.Sync(ctx, a.db, cat, c, ext)
 	cancel()
 	if err == nil && res.Upserted+res.Removed > 0 {
@@ -524,7 +537,7 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 	}
 	rt.apply.Unlock()
 	if err == nil {
-		a.catalogImagesPass(cat, c)
+		a.catalogImagesPass(cat, c, background)
 	}
 	interval := time.Duration(cat.SyncIntervalSec) * time.Second
 	if interval < time.Minute {
@@ -545,6 +558,12 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 		_ = a.db.SetCatalogSyncState(id, "", nil, catSignedOutMsg)
 		a.setCatalogState(id, catStateSignedOU, catSignedOutMsg)
 		a.recordAudit("catalog.signed_out", id, nil)
+	case catalogNetworkWaiting(err):
+		// A background pass and the catalog's VPN is not up: wait for it,
+		// as an inventory refresh does. Not an issue, and the last good
+		// sync stays what it was.
+		a.setCatalogState(id, catStateVPN, a.catalogWaitingVPNMsg(id))
+		next = time.Now().Add(time.Minute)
 	case errors.As(err, &ra):
 		next = time.Now().Add(ra.Wait)
 		a.setCatalogState(id, catStateError, catalogShortError(err))
@@ -565,12 +584,16 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 // catalogIconPass brings the catalog's own icon (server.icon, revision 5)
 // in step: anonymous, so it also runs before a sign-in (on Add). Failures
 // only log; the next pass tries again.
-func (a *App) catalogIconPass(cat *store.Catalog) {
+func (a *App) catalogIconPass(cat *store.Catalog, background bool) {
 	c, err := a.catalogClient(cat)
 	if err != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	base := context.Background()
+	if background {
+		base = catalogBackground(base)
+	}
+	ctx, cancel := context.WithTimeout(base, time.Minute)
 	defer cancel()
 	changed, err := catalog.SyncServerIcon(ctx, a.db, cat, c)
 	if err != nil {
@@ -589,10 +612,14 @@ func (a *App) catalogIconPass(cat *store.Catalog) {
 // this machine lacks, materialises again when any arrived, and drops
 // cached images nothing uses any more. Failures only log: the rows show
 // the default icon and the next pass tries again.
-func (a *App) catalogImagesPass(cat *store.Catalog, c *catalog.Client) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+func (a *App) catalogImagesPass(cat *store.Catalog, c *catalog.Client, background bool) {
+	base := context.Background()
+	if background {
+		base = catalogBackground(base)
+	}
+	ctx, cancel := context.WithTimeout(base, 2*time.Minute)
 	defer cancel()
-	a.catalogIconPass(cat)
+	a.catalogIconPass(cat, background)
 	n, err := catalog.FetchImages(ctx, a.db, cat.ID, c)
 	if err != nil {
 		log.Printf("catalog %s: images: %v", cat.Name, err)

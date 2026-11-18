@@ -3389,6 +3389,10 @@ A catalog lives on a **catalog server**, a separate self-hosted service that you
 
 Sync runs in the background on an interval and on **Sync now**. The catalog's root folder shows its state: signed out, a sync error, or how many slots still wait for you.
 
+**A catalog server behind a VPN**: pick a network profile under **Network** when you add the catalog (or the code), or later under **Edit** on the catalog. Everything the app sends to that catalog then goes through the profile: sync, sign-in, publish, your edits, icons. **Sync now**, a sign-in and your edits may bring the VPN up, as a connect does. The background sync does not: it uses the VPN when it is already up (or reaches the server directly when the profile is in auto mode and the server answers without it), and otherwise the catalog shows **waits for VPN** and syncs once the VPN is up. A browser sign-in happens in your browser, which does not go through the app's VPN profile; when only the profile reaches the server, add the catalog with a code instead.
+
+**Open in ssh-tool** on the catalog's web page opens that connection, folder or slot here: the app selects it in the tree (or opens the slot in Settings -> Catalogs), syncing first when it has not got the record yet. A link never connects, starts a forward or runs anything. For a catalog this app is not attached to, it offers the catalog's connect page in your browser; a record you cannot see is reported as not shared with you or no longer existing.
+
 ### Your own credentials, and slots
 
 - **My settings**: open a catalog folder or connection and set your credential, network profile or jump host there, as for your own tree; it stays on your machines and is inherited below.

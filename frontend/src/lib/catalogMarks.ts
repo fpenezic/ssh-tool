@@ -24,6 +24,8 @@ export function catalogStateLabel(c: CatalogInfo): { text: string; tone: "ok" | 
       return { text: "vault locked", tone: "warn", action: "unlock" };
     case "waiting":
       return { text: "waits for profile sync", tone: "busy" };
+    case "waiting_vpn":
+      return { text: "waits for VPN", tone: "busy", action: "sync" };
   }
   if (c.unbound > 0) {
     return { text: `${c.unbound} slot${c.unbound === 1 ? "" : "s"} to bind`, tone: "warn", action: "slots" };
@@ -59,6 +61,7 @@ export function parseMarker(v: string | null | undefined): CatalogMarker | null 
 /** What an ssh-tool:// link asks for (Android hands the whole URL over). */
 export type SshToolLink =
   | { kind: "catalog"; url: string; code: string }
+  | { kind: "catalog_open"; url: string; recordKind: string; uuid: string }
   | { kind: "import"; source: string }
   | null;
 
@@ -78,6 +81,16 @@ export function parseSshToolLink(raw: string): SshToolLink {
     const url = u.searchParams.get("url") ?? "";
     const code = u.searchParams.get("code") ?? "";
     return url && code ? { kind: "catalog", url, code } : null;
+  }
+  if (host === "catalog" && path === "/open") {
+    // Select and reveal only; an unknown kind or a malformed uuid is no
+    // link at all (catalog PROTOCOL 8.3).
+    const url = u.searchParams.get("url") ?? "";
+    const recordKind = u.searchParams.get("kind") ?? "";
+    const uuid = (u.searchParams.get("uuid") ?? "").toLowerCase();
+    const okKind = recordKind === "connections" || recordKind === "folders" || recordKind === "slots";
+    const okUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uuid);
+    return url && okKind && okUUID ? { kind: "catalog_open", url, recordKind, uuid } : null;
   }
   if (host === "import" || path === "/import") {
     const source = u.searchParams.get("source") ?? "";

@@ -10,6 +10,7 @@
   import { errMsg as humanError } from "./lib/connectErrors";
   import { EventsOn } from "./lib/wailsRuntime";
   import { catalogs } from "./lib/catalog.svelte";
+  import { openCatalogLink } from "./lib/catalogOpenLink";
   import { acceptTabDrag, reconstructTabFromPayload, TAB_DRAG_TYPE } from "./lib/tabTransfer";
   import { focusActivePane } from "./lib/paneFocus";
   import Sidebar from "./lib/Sidebar.svelte";
@@ -752,6 +753,10 @@
       catalogs.startEnroll(link.url, link.code);
       return;
     }
+    if (link?.kind === "catalog_open") {
+      void openCatalogLink({ url: link.url, kind: link.recordKind, uuid: link.uuid });
+      return;
+    }
     const source = importSourceFromLink(url);
     if (!source) return;
     deepLink.setImportURL(source);
@@ -761,6 +766,11 @@
   // never a redemption on its own.
   EventsOn("deep_link_catalog", (l: any) => {
     if (l && typeof l.url === "string" && typeof l.code === "string") catalogs.startEnroll(l.url, l.code);
+  });
+  // ssh-tool://catalog/open: select and reveal a catalog record, nothing
+  // more (catalogOpenLink.ts).
+  EventsOn("deep_link_catalog_open", (l: any) => {
+    if (l && typeof l.url === "string" && typeof l.kind === "string" && typeof l.uuid === "string") void openCatalogLink(l);
   });
 
   // OS file-manager integration: "Open in ssh-tool" on a directory
@@ -1836,7 +1846,7 @@
     />
   {/if}
   {#if catalogs.enroll}
-    <EnrollModal url={catalogs.enroll.url} code={catalogs.enroll.code} onClose={() => (catalogs.enroll = null)} />
+    <EnrollModal url={catalogs.enroll.url} code={catalogs.enroll.code} network={catalogs.enroll.network ?? ""} onClose={() => (catalogs.enroll = null)} />
   {/if}
   {#if publishModal.open}
     <PublishModal folderId={publishModal.folderId} folderName={publishModal.folderName} connId={publishModal.connId} presetTarget={publishModal.targetUUID} presetCatalog={publishModal.catalogId} onClose={() => publishModal.close()} />

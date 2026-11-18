@@ -29,6 +29,8 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 - **Move catalog records by dragging**: a writer can drag a catalog folder or connection onto another folder of the same catalog, or a folder onto the catalog's top to make it a space. The move was there, but catalog rows could not be picked up.
 - **The Delete key on a catalog record** does what its menu does: "Delete for everyone" (with that confirmation) for a writer, the local delete for a record that left its catalog, and otherwise a note that it cannot be deleted. Before, it opened the plain delete prompt, which then failed.
 - **Duplicate in the catalog**: writers can duplicate a catalog connection in its folder with the same settings, slots and forwards, entering only the new name and address.
+- **A catalog behind a VPN**: a catalog can go through a network profile (Network, when you add it or under Edit). Sync now, sign-in, publish and your edits may bring the VPN up; the background sync only uses it when it is already up, and otherwise the catalog shows "waits for VPN" instead of a sync error.
+- **Open in ssh-tool** on the catalog's web page selects that connection, folder or slot in the app, syncing first when needed. A link never connects or runs anything; for a catalog this app is not attached to, it offers the catalog's connect page.
 - Publishing keeps private Vaultwarden / Bitwarden items out on request: untick shared sources in "What to send", or a single credential in the review. If the folder changes after you reviewed it, the publish stops and shows the new review.
 - A catalog link (`ssh-tool://`) only fills in the enrollment form; nothing contacts the server it names until you click Check.
 

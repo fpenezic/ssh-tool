@@ -39,6 +39,7 @@ export {
     CatalogMatchPreview,
     CatalogMatchResult,
     CatalogMatchUndoResult,
+    CatalogOpenResult,
     CatalogPendingSlot,
     CatalogPublishInput,
     CatalogPublishProblem,

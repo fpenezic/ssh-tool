@@ -4,7 +4,7 @@ import type { CatalogInfo } from "./api";
 
 const cat = (over: Partial<CatalogInfo>): CatalogInfo => ({
   id: "c", name: "Team", base_url: "", server_name: "", account_name: "", root_folder_id: "r",
-  last_sync_at: 1, last_error: "", sync_interval_sec: 300, state: "ok", slots: 0, unbound: 0, removed: 0, ...over,
+  last_sync_at: 1, last_error: "", sync_interval_sec: 300, state: "ok", slots: 0, unbound: 0, removed: 0, network_profile_id: "", ...over,
 });
 
 describe("parseMarker", () => {
@@ -48,6 +48,15 @@ describe("parseSshToolLink", () => {
   });
   it("reads an import link", () => {
     expect(parseSshToolLink("ssh-tool://import?source=https%3A%2F%2Fx.example.com%2Fa.toml")).toEqual({ kind: "import", source: "https://x.example.com/a.toml" });
+  });
+  it("reads a catalog open link and refuses a malformed one", () => {
+    const u = "3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b";
+    expect(parseSshToolLink(`ssh-tool://catalog/open?url=https%3A%2F%2Fcatalog.example.com&kind=connections&uuid=${u.toUpperCase()}`)).toEqual({
+      kind: "catalog_open", url: "https://catalog.example.com", recordKind: "connections", uuid: u,
+    });
+    expect(parseSshToolLink(`ssh-tool://catalog/open?url=https%3A%2F%2Fc.example.com&kind=forwards&uuid=${u}`)).toBeNull();
+    expect(parseSshToolLink("ssh-tool://catalog/open?url=https%3A%2F%2Fc.example.com&kind=folders&uuid=../../x")).toBeNull();
+    expect(parseSshToolLink(`ssh-tool://catalog/open?kind=slots&uuid=${u}`)).toBeNull();
   });
   it("ignores other links and incomplete ones", () => {
     expect(parseSshToolLink("https://example.com")).toBeNull();

@@ -1247,7 +1247,7 @@ export type OpksshCertLifetime = {
 
 // ----- Shared connection catalogs (app_catalog.go) -----
 
-export type CatalogState = "ok" | "syncing" | "no_login" | "signed_out" | "error" | "locked" | "signing_in" | "waiting";
+export type CatalogState = "ok" | "syncing" | "no_login" | "signed_out" | "error" | "locked" | "signing_in" | "waiting" | "waiting_vpn";
 
 export interface CatalogInfo {
   // The catalog's own icon (its root folder's image), absent for none.
@@ -1266,6 +1266,19 @@ export interface CatalogInfo {
   slots: number;
   unbound: number;
   removed: number;
+  // The network profile the catalog's traffic goes through, "" for direct.
+  network_profile_id: string;
+}
+
+// What an ssh-tool://catalog/open link resolved to (catalog PROTOCOL 8.3).
+export interface CatalogOpenResult {
+  status: "ok" | "not_connected" | "not_found";
+  catalog_id?: string;
+  catalog_name?: string;
+  kind?: "folder" | "connection" | "slot";
+  id?: string;
+  connect_url?: string;
+  sync_error?: string;
 }
 
 export interface CatalogPublishTarget { uuid: string; name: string; path: string }
@@ -1824,7 +1837,9 @@ export const api = {
 
   // Shared connection catalogs.
   catalogList: () => G.CatalogList() as unknown as Promise<CatalogInfo[]>,
-  catalogAdd: (baseURL: string) => G.CatalogAdd(baseURL) as unknown as Promise<CatalogInfo>,
+  catalogAdd: (baseURL: string, networkProfileId = "") => G.CatalogAdd(baseURL, networkProfileId) as unknown as Promise<CatalogInfo>,
+  catalogSetNetwork: (id: string, networkProfileId: string) => G.CatalogSetNetwork(id, networkProfileId) as Promise<void>,
+  catalogOpenLink: (url: string, kind: string, uuid: string) => G.CatalogOpenLink(url, kind, uuid) as unknown as Promise<CatalogOpenResult>,
   catalogSignIn: (id: string) => G.CatalogSignIn(id) as unknown as Promise<void>,
   catalogCancelSignIn: (id: string) => G.CatalogCancelSignIn(id) as unknown as Promise<void>,
   catalogSignOut: (id: string) => G.CatalogSignOut(id) as unknown as Promise<void>,
@@ -1857,8 +1872,8 @@ export const api = {
   catalogPublishTargets: (id: string) => G.CatalogPublishTargets(id) as unknown as Promise<CatalogPublishTargets>,
   catalogPublishPreview: (inp: CatalogPublishInput) => G.CatalogPublishPreview(inp as any) as unknown as Promise<PublishPlan>,
   catalogPublish: (inp: CatalogPublishInput) => G.CatalogPublish(inp as any) as unknown as Promise<CatalogPublishResult>,
-  catalogEnrollInspect: (url: string, code: string) => G.CatalogEnrollInspect(url, code) as unknown as Promise<CatalogEnrollPreview>,
-  catalogEnrollConfirm: (url: string, code: string, replace: boolean) => G.CatalogEnrollConfirm(url, code, replace) as unknown as Promise<CatalogInfo>,
+  catalogEnrollInspect: (url: string, code: string, networkProfileId = "") => G.CatalogEnrollInspect(url, code, networkProfileId) as unknown as Promise<CatalogEnrollPreview>,
+  catalogEnrollConfirm: (url: string, code: string, replace: boolean, networkProfileId = "") => G.CatalogEnrollConfirm(url, code, replace, networkProfileId) as unknown as Promise<CatalogInfo>,
   catalogPublishOldApps: () => G.CatalogPublishOldApps() as unknown as Promise<SeenApp[]>,
   catalogResetRecordField: (kind: "folders" | "connections", id: string, field: string) =>
     G.CatalogResetRecordField(kind, id, field) as unknown as Promise<void>,

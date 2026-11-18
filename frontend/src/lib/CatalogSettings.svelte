@@ -23,7 +23,9 @@
   let adding = $state(false);
   let busy = $state<Record<string, boolean>>({});
   let open = $state<string | null>(null); // catalog whose slots are shown
-  let edit = $state<{ id: string; name: string; interval: number } | null>(null);
+  let edit = $state<{ id: string; name: string; interval: number; network: string; networkWas: string } | null>(null);
+  // The network a new catalog is reached through ("" = direct).
+  let addNet = $state("");
   // Writers: a slot being edited, and the add-slot form.
   let slotEdit = $state<{ uuid: string; name: string; doc: string } | null>(null);
   let slotAdd = $state<{ catalog: string; folder: string; type: "cred" | "net" | "jump"; name: string; doc: string } | null>(null);
@@ -125,7 +127,7 @@
     if (!u || adding) return;
     adding = true;
     try {
-      const c = await api.catalogAdd(u);
+      const c = await api.catalogAdd(u, addNet);
       addURL = "";
       open = c.id;
       toast.ok(`${c.name} attached`);
@@ -197,10 +199,17 @@
     await catalogs.loadSlots(c.id);
   }
 
+  function netName(id: string): string {
+    return networkProfiles.list.find((p) => p.id === id)?.name ?? "a VPN profile";
+  }
+
   async function saveConfig() {
     if (!edit) return;
     const e = edit;
-    await run(e.id, "Save", () => api.catalogSetConfig(e.id, e.name, e.interval * 60));
+    await run(e.id, "Save", async () => {
+      await api.catalogSetConfig(e.id, e.name, e.interval * 60);
+      if (e.network !== e.networkWas) await api.catalogSetNetwork(e.id, e.network);
+    });
     edit = null;
   }
 
@@ -302,14 +311,18 @@
               <IconRefresh size={14} /> Sync
             </button>
           {/if}
-          <button onclick={() => (edit = { id: c.id, name: c.name, interval: Math.round(c.sync_interval_sec / 60) })}>Edit</button>
+          <button onclick={() => (edit = { id: c.id, name: c.name, interval: Math.round(c.sync_interval_sec / 60), network: c.network_profile_id ?? "", networkWas: c.network_profile_id ?? "" })}>Edit</button>
           <button class="danger" title="Remove catalog" onclick={() => remove(c)}><IconTrash size={14} /></button>
         </div>
       </div>
       <div class="cat-meta">
         {#if c.account_name}signed in as {c.account_name}{" - "}{/if}{syncedLabel(c)}
+        {#if c.network_profile_id}{" - "}via {netName(c.network_profile_id)}{/if}
         {#if c.removed > 0}{" - "}<span class="warn-text"><IconAlertTriangle size={12} /> {c.removed} removed from the catalog</span>{/if}
       </div>
+      {#if c.state === "waiting_vpn" && c.error}
+        <p class="hint">{c.error}</p>
+      {/if}
       {#if (c.state === "error" || c.state === "signed_out") && (c.error || c.last_error)}
         <p class="hint warn-note">{c.error || c.last_error}</p>
       {/if}
@@ -321,6 +334,13 @@
         <div class="cat-form">
           <label>Name <input bind:value={edit.name} /></label>
           <label>Sync every (minutes) <input type="number" min="1" bind:value={edit.interval} /></label>
+          <label>Network
+            <select bind:value={edit.network}>
+              <option value="">Direct</option>
+              {#each networkProfiles.list as np (np.id)}<option value={np.id}>via {np.name}</option>{/each}
+            </select>
+            <span class="hint sub">For a catalog server behind a VPN. Sync now, sign-in and your edits may bring the VPN up; the background sync only uses it when it is already up (or reaches the server directly in the profile's auto mode), otherwise it waits.</span>
+          </label>
           <div class="cat-form-actions">
             <button class="primary" onclick={saveConfig}>Save</button>
             <button onclick={() => (edit = null)}>Cancel</button>
@@ -400,8 +420,14 @@
 {#if !isMobile}
   <div class="cat-add">
     <input bind:value={addURL} placeholder="https://catalog.example.com" onkeydown={(e) => e.key === "Enter" && add()} />
+    {#if networkProfiles.list.length > 0}
+      <select class="cat-net" bind:value={addNet} title="How the catalog server is reached">
+        <option value="">Direct</option>
+        {#each networkProfiles.list as np (np.id)}<option value={np.id}>via {np.name}</option>{/each}
+      </select>
+    {/if}
     <button class="primary" disabled={adding || !addURL.trim()} onclick={add}>{adding ? "Waiting for sign-in..." : "Add catalog"}</button>
-    <button onclick={() => catalogs.startEnroll(addURL.trim(), "")}>Add with a code</button>
+    <button onclick={() => catalogs.startEnroll(addURL.trim(), "", addNet)}>Add with a code</button>
   </div>
   <p class="hint sub">Adding opens the catalog's sign-in page in your browser. With a code from the catalog's web page ("Connect ssh-tool"), no browser sign-in is needed.</p>
 {:else}
@@ -453,12 +479,20 @@
   .slot-bind :global(.search-select) { flex: 1; min-width: 0; }
   .cat-add { display: flex; gap: 6px; max-width: 520px; margin-top: 8px; }
   .cat-add input { flex: 1; }
+  .cat-add .cat-net { max-width: 14rem; }
   .hint-inline { font-weight: 400; opacity: 0.6; font-size: var(--fs-sm); }
   .hint.sub { margin: 0; font-size: var(--fs-sm); }
   .danger { color: var(--danger, #e66); }
   .linklike { background: none; border: none; padding: 0; color: var(--sapphire); cursor: pointer; font-size: inherit; text-decoration: underline; }
   .match { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
   .match h3 { margin: 0; }
-  .slot-act { padding: 0 6px; font-size: var(--fs-sm); }
+  .slot-act, .slot-toggle, .slot-add {
+    background: var(--surface0); color: var(--text); border: 0; border-radius: var(--r-sm);
+    height: var(--ctl-h-sm); padding: 0 0.6rem; font: inherit; font-size: var(--fs-sm); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .slot-act:hover, .slot-toggle:hover, .slot-add:hover { background: var(--surface1); }
+  .slot-act { padding: 0 6px; }
+  .slot-act.danger { color: var(--red); }
   .slot-add { align-self: flex-start; margin-top: 4px; }
 </style>

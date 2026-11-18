@@ -108,7 +108,7 @@ func newEnrollApp(t *testing.T) (*App, *enrollServer, string) {
 func TestCatalogEnrollFlow(t *testing.T) {
 	a, es, base := newEnrollApp(t)
 	// Inspect: nothing created, nothing used up; the URL as received.
-	p, err := a.CatalogEnrollInspect(base+"/", "goodc-0de")
+	p, err := a.CatalogEnrollInspect(base+"/", "goodc-0de", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestCatalogEnrollFlow(t *testing.T) {
 		t.Fatalf("inspect created or redeemed something: %d catalogs, %d redeems", len(cats), es.redeems)
 	}
 	// Confirm: redeemed once, attached, signed in, device name sent.
-	info, err := a.CatalogEnrollConfirm(base, "goodc-0de", false)
+	info, err := a.CatalogEnrollConfirm(base, "goodc-0de", false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,25 +137,25 @@ func TestCatalogEnrollFlow(t *testing.T) {
 		t.Fatalf("account not recorded: %+v", cat)
 	}
 	// A used code: refused at inspect, with what to do.
-	if _, err := a.CatalogEnrollInspect(base, "goodc-0de"); !errors.Is(err, catalog.ErrEnrollmentInvalid) {
+	if _, err := a.CatalogEnrollInspect(base, "goodc-0de", ""); !errors.Is(err, catalog.ErrEnrollmentInvalid) {
 		t.Fatalf("used code: %v", err)
 	}
 	// Already attached: inspect says so; confirm without replace refuses.
 	es.mu.Lock()
 	es.redeemed = false
 	es.mu.Unlock()
-	p, err = a.CatalogEnrollInspect(base, "GOODC0DE")
+	p, err = a.CatalogEnrollInspect(base, "GOODC0DE", "")
 	if err != nil || p.ExistingID != info.ID || p.ExistingAccount != "Alice" {
 		t.Fatalf("existing: %+v %v", p, err)
 	}
-	if _, err := a.CatalogEnrollConfirm(base, "GOODC0DE", false); err == nil || !strings.Contains(err.Error(), "already attached") {
+	if _, err := a.CatalogEnrollConfirm(base, "GOODC0DE", false, ""); err == nil || !strings.Contains(err.Error(), "already attached") {
 		t.Fatalf("no replace: %v", err)
 	}
 	if es.redeems != 1 {
 		t.Fatal("the code was redeemed without replace")
 	}
 	// Replace: the old session is revoked, the new token kept, same row.
-	if _, err := a.CatalogEnrollConfirm(base, "GOODC0DE", true); err != nil {
+	if _, err := a.CatalogEnrollConfirm(base, "GOODC0DE", true, ""); err != nil {
 		t.Fatal(err)
 	}
 	if len(es.revoked) == 0 {
@@ -168,19 +168,19 @@ func TestCatalogEnrollFlow(t *testing.T) {
 
 func TestCatalogEnrollErrors(t *testing.T) {
 	a, es, base := newEnrollApp(t)
-	if _, err := a.CatalogEnrollInspect(base, "WRONG"); !errors.Is(err, catalog.ErrEnrollmentInvalid) {
+	if _, err := a.CatalogEnrollInspect(base, "WRONG", ""); !errors.Is(err, catalog.ErrEnrollmentInvalid) {
 		t.Fatalf("invalid code: %v", err)
 	}
 	es.limited = true
-	if _, err := a.CatalogEnrollInspect(base, "GOODC0DE"); err == nil || !strings.Contains(err.Error(), "42 s") {
+	if _, err := a.CatalogEnrollInspect(base, "GOODC0DE", ""); err == nil || !strings.Contains(err.Error(), "42 s") {
 		t.Fatalf("rate limited inspect: %v", err)
 	}
-	if _, err := a.CatalogEnrollConfirm(base, "GOODC0DE", false); err == nil || !strings.Contains(err.Error(), "42 s") {
+	if _, err := a.CatalogEnrollConfirm(base, "GOODC0DE", false, ""); err == nil || !strings.Contains(err.Error(), "42 s") {
 		t.Fatalf("rate limited redeem: %v", err)
 	}
 	es.limited = false
 	es.major = 2
-	if _, err := a.CatalogEnrollInspect(base, "GOODC0DE"); err == nil || !strings.Contains(err.Error(), "protocol") {
+	if _, err := a.CatalogEnrollInspect(base, "GOODC0DE", ""); err == nil || !strings.Contains(err.Error(), "protocol") {
 		t.Fatalf("protocol major: %v", err)
 	}
 	if es.inspects != 1 {
@@ -192,7 +192,7 @@ func TestCatalogEnrollErrors(t *testing.T) {
 	// Locked vault: nothing redeemed.
 	es.major = 1
 	a.vault.Lock(false)
-	if _, err := a.CatalogEnrollConfirm(base, "GOODC0DE", false); err == nil || es.redeems != 0 {
+	if _, err := a.CatalogEnrollConfirm(base, "GOODC0DE", false, ""); err == nil || es.redeems != 0 {
 		t.Fatalf("locked vault: %v, redeems %d", err, es.redeems)
 	}
 }
