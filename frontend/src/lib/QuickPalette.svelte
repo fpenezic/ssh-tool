@@ -13,6 +13,7 @@
 </script>
 
 <script lang="ts">
+  import { forwardBookmarks } from "./forwardBookmarks";
   import { tree, selection, sessions, paneTabs, view } from "./stores.svelte";
   import { connectionActions } from "./connectionActions.svelte";
   import { api } from "./api";
@@ -278,8 +279,8 @@
         label,
         haystacks,
       });
-      if ((f.kind === "dynamic" || f.kind === "local") && f.bookmarks?.length) {
-        for (const bm of f.bookmarks) {
+      if (f.kind === "dynamic" || f.kind === "local") {
+        for (const bm of forwardBookmarks(f)) {
           out.push({
             kind: "bookmark",
             spec: f,

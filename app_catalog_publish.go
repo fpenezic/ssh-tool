@@ -112,6 +112,16 @@ func (a *App) catalogPublishGuard(catalogID string) error {
 	return nil
 }
 
+// catalogRevision is the server's protocol revision from its meta (0 when
+// it cannot be read: nothing revision-gated is sent then).
+func catalogRevision(ctx context.Context, c *catalog.Client) int {
+	m, err := c.Meta(ctx)
+	if err != nil {
+		return 0
+	}
+	return m.Protocol.Revision
+}
+
 // catalogSingleConnSupported: a single-connection publish needs a server
 // from protocol revision 3; an older one refuses the request.
 func catalogSingleConnSupported(ctx context.Context, c *catalog.Client, in CatalogPublishInput) error {
@@ -240,6 +250,7 @@ func (a *App) CatalogPublishPreview(in CatalogPublishInput) (*catalog.PublishPla
 		if c, err := a.catalogClient(cat); err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			opts.Images = catalogImageLimits(ctx, c)
+			opts.Revision = catalogRevision(ctx, c)
 			err := catalogSingleConnSupported(ctx, c, in)
 			cancel()
 			if err != nil {
@@ -273,6 +284,7 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	opts.ResolveDyn = a.publishResolveDyn
 	mctx, mcancel := context.WithTimeout(context.Background(), 20*time.Second)
 	opts.Images = catalogImageLimits(mctx, c)
+	opts.Revision = catalogRevision(mctx, c)
 	serr := catalogSingleConnSupported(mctx, c, in)
 	mcancel()
 	if serr != nil {

@@ -133,6 +133,17 @@ func (a *App) CatalogRecordSave(in catalog.EditInput) (*CatalogSaveResult, error
 	if err != nil {
 		return &CatalogSaveResult{Message: "not saved: " + err.Error()}, nil
 	}
+	if in.Kind == catalog.KindForwards {
+		// Shared bookmarks need revision 6: the stored revision is only
+		// updated at sign-in, the server's meta says what it is now.
+		mctx, mcancel := context.WithTimeout(context.Background(), 20*time.Second)
+		if r := catalogRevision(mctx, t.client); r > 0 {
+			cp := *t.cat
+			cp.ProtocolRevision = int64(r)
+			t.cat = &cp
+		}
+		mcancel()
+	}
 	plan, err := catalog.PlanEdit(a.db, t.cat, t.scope, in, json.RawMessage(t.raw), t.rev)
 	if err != nil {
 		return nil, err

@@ -2642,6 +2642,16 @@ export class PortForward {
              */
             this["bookmarks"] = [];
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * CatalogBookmarks: on a catalog forward, the bookmarks the catalog
+             * record shares (revision 6), read only here; Bookmarks stay the
+             * user's own. Not stored apart: read from the record on load.
+             * @member
+             * @type {ProxyBookmark[] | undefined}
+             */
+            this["catalog_bookmarks"] = undefined;
+        }
         if (!("browser_mode" in $$source)) {
             /**
              * BrowserMode decides how a bookmark on this forward opens:
@@ -2708,9 +2718,13 @@ export class PortForward {
      */
     static createFrom($$source = {}) {
         const $$createField9_0 = $$createType16;
+        const $$createField10_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("bookmarks" in $$parsedSource) {
             $$parsedSource["bookmarks"] = $$createField9_0($$parsedSource["bookmarks"]);
+        }
+        if ("catalog_bookmarks" in $$parsedSource) {
+            $$parsedSource["catalog_bookmarks"] = $$createField10_0($$parsedSource["catalog_bookmarks"]);
         }
         return new PortForward(/** @type {Partial<PortForward>} */($$parsedSource));
     }

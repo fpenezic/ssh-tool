@@ -12,6 +12,7 @@
   // because that hides intent (user may be looking at a dead tab
   // intentionally before deciding what to do).
 
+  import { forwardBookmarks } from "./forwardBookmarks";
   import { onMount, onDestroy } from "svelte";
   import { errMsg } from "./connectErrors";
   import { toast } from "./toast.svelte.ts";
@@ -322,8 +323,8 @@
             {/if}
           </div>
         </li>
-        {#if (spec.kind === "dynamic" || spec.kind === "local") && spec.bookmarks?.length > 0}
-          {#each spec.bookmarks as bm (bm.url)}
+        {#if (spec.kind === "dynamic" || spec.kind === "local") && forwardBookmarks(spec).length > 0}
+          {#each forwardBookmarks(spec) as bm (bm.url)}
             <li class="bm">
               <button
                 class="bm-btn"

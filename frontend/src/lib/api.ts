@@ -1427,6 +1427,8 @@ export interface CatalogEditForm {
   settings: InheritableSettings;
   kind: string; local_addr: string | null; local_port: number | null; remote_host: string | null; remote_port: number | null;
   auto_start: boolean; description: string;
+  // A forward's shared bookmarks (catalog revision 6).
+  bookmarks?: ProxyBookmark[];
 }
 export interface CatalogEditInput {
   kind: "folders" | "connections" | "forwards"; local_id: string; rev: number;
@@ -3182,6 +3184,9 @@ export interface PortForward {
   auto_start: boolean;
   description: string;
   bookmarks: ProxyBookmark[];
+  // On a catalog forward: the bookmarks the catalog record shares (read
+  // only; the user's own are `bookmarks`).
+  catalog_bookmarks?: ProxyBookmark[];
   /** "" | "system" | "isolated" | "persistent" - how a bookmark on this
    *  forward opens a browser. "" takes the per-kind default: the user's
    *  own browser for a local forward, an isolated profile for SOCKS. */

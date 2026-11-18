@@ -190,6 +190,7 @@
     // The catalog edit state belongs to the form that closed.
     fwRec = null;
     fwRecordMode = false;
+    recBms = [];
     fwConflict = null;
     suggestedAutoStart = false;
   }
@@ -211,6 +212,15 @@
   let connWritable = $state(false);
   let fwRec = $state<CatalogRecordInfo | null>(null);
   let fwRecordMode = $state(false);
+  // Record mode: the forward's shared bookmarks (catalog revision 6), as
+  // the writer edits them for everyone.
+  let recBms = $state<ProxyBookmark[]>([]);
+  // A catalog bookmark that one of the user's own already has (same URL)
+  // is not shown twice: theirs is the one with the tree pin.
+  function sharedOnly(spec: PortForward): ProxyBookmark[] {
+    const own = new Set((spec.bookmarks ?? []).map((b) => b.url));
+    return (spec.catalog_bookmarks ?? []).filter((b) => !own.has(b.url));
+  }
   let fwConflict = $state<{ input: CatalogEditInput; plan: NonNullable<CatalogSaveResult["plan"]> } | null>(null);
   let addToCatalog = $state(false);
   const fwLocked = $derived(editingCatalogFw && !fwRecordMode);
@@ -233,13 +243,15 @@
     nRemotePort = (f ? f.remote_port : spec.remote_port) ?? undefined;
     nAutoStart = f ? f.auto_start : spec.auto_start;
     nDesc = (f ? f.description : spec.description) ?? "";
+    recBms = f ? (f.bookmarks ?? []).map((b) => ({ name: b.name, url: b.url })) : [];
     formBase = formSnap();
   }
   async function saveForwardRecord(input?: CatalogEditInput): Promise<boolean> {
     if (!fwRec?.form || !editingForwardId) return false;
     const edited = { ...fwRec.form, local_addr: nLocalAddr || null, local_port: portOrUndef(nLocalPort) ?? null,
       remote_host: nKind === "dynamic" ? null : nRemoteHost || null, remote_port: nKind === "dynamic" ? null : portOrUndef(nRemotePort) ?? null,
-      auto_start: nAutoStart, description: nDesc };
+      auto_start: nAutoStart, description: nDesc,
+      bookmarks: recBms.map((b) => ({ name: b.name.trim(), url: b.url.trim() })).filter((b) => b.name || b.url) };
     const inp: CatalogEditInput = input ?? { kind: "forwards", local_id: editingForwardId, rev: fwRec.rev, loaded: fwRec.form, edited, accept_rev: 0, resolve: {}, slot_names: {} };
     let r: CatalogSaveResult;
     try {
@@ -302,6 +314,7 @@
     suggestedAutoStart = false;
     fwRec = null;
     fwRecordMode = false;
+    recBms = [];
     fwConflict = null;
     if (spec.remote_uuid) {
       // Applied only while this forward's form is still the one open.
@@ -328,7 +341,7 @@
   // editor tab or the selection asks before dropping what was typed.
   let formBase = $state("");
   function formSnap(): string {
-    return JSON.stringify([nKind, nLocalAddr, nLocalPort ?? null, nRemoteHost, nRemotePort ?? null, nAutoStart, nDesc, nBrowserMode]);
+    return JSON.stringify([nKind, nLocalAddr, nLocalPort ?? null, nRemoteHost, nRemotePort ?? null, nAutoStart, nDesc, nBrowserMode, recBms]);
   }
   const formDirty = $derived(showAdd && formSnap() !== formBase);
   $effect(() => registerUnsaved({
@@ -757,7 +770,22 @@
           <button type="button" class:active={!fwRecordMode} onclick={() => setFwRecordMode(false)}>My settings</button>
           <button type="button" class:active={fwRecordMode} onclick={() => setFwRecordMode(true)}><IconUsers size={11} /> Catalog record</button>
         </div>
-        {#if fwRecordMode}<p class="fw-rec">Save changes this forward for everyone with access to "{fwRec.folder_name}". Your local port, auto start and bookmarks stay yours.</p>{/if}
+        {#if fwRecordMode}<p class="fw-rec">Save changes this forward for everyone with access to "{fwRec.folder_name}". Your local port, auto start and your own bookmarks stay yours.</p>{/if}
+        {#if fwRecordMode && (nKind === "local" || nKind === "dynamic")}
+          <div class="rec-bms">
+            <span class="rec-bms-title"><IconUsers size={11} /> Shared bookmarks <span class="field-note">everyone with access sees these; http or https addresses only</span></span>
+            {#each recBms as b, i (i)}
+              <div class="rec-bm">
+                <input bind:value={b.name} placeholder="Label" />
+                <input class="grow" bind:value={b.url} placeholder="https://..." />
+                <button type="button" title="Remove" onclick={() => (recBms = recBms.filter((_, j) => j !== i))}>×</button>
+              </div>
+            {/each}
+            {#if recBms.length < 50}
+              <button type="button" class="rec-bm-add" onclick={() => (recBms = [...recBms, { name: "", url: "" }])}>+ Shared bookmark</button>
+            {/if}
+          </div>
+        {/if}
       {:else if !editingForwardId && connection.catalog_id && connWritable}
         <div class="fw-mode" role="radiogroup" aria-label="Where the new forward goes">
           <button type="button" class:active={!addToCatalog} onclick={() => (addToCatalog = false)}>Yours (this machine)</button>
@@ -983,6 +1011,16 @@
           </div>
           {#if spec.kind === "dynamic" || spec.kind === "local"}
             <div class="bookmarks">
+              {#each sharedOnly(spec) as bm (bm.url)}
+                <span class="bm-chip bm-shared" title="Shared in the catalog for everyone with access">
+                  <button
+                    class="bm-launch bm-launch-active"
+                    disabled={connecting}
+                    title={running ? bm.url : `Connect, start the proxy, and open ${bm.url}`}
+                    onclick={() => launchBrowser(spec, bm.url)}
+                  ><IconUsers size={10} /> {bm.name}</button>
+                </span>
+              {/each}
               {#each spec.bookmarks ?? [] as bm, i}
                 <span class="bm-chip">
                   <button
@@ -1044,6 +1082,12 @@
   .fw-mode button { border: 0; border-radius: 0; background: transparent; padding: 2px 10px; font-size: var(--fs-sm); display: inline-flex; align-items: center; gap: 4px; }
   .fw-mode button.active { background: color-mix(in srgb, var(--peach) 25%, var(--surface0)); }
   .fw-rec { margin: 0 0 4px; font-size: var(--fs-sm); color: var(--peach); }
+  .rec-bms { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+  .rec-bms-title { font-size: var(--fs-sm); display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .rec-bm { display: flex; gap: 4px; align-items: center; }
+  .rec-bm .grow { flex: 1; min-width: 0; }
+  .rec-bm-add { align-self: flex-start; }
+  .bm-shared .bm-launch { display: inline-flex; align-items: center; gap: 3px; }
   .fw-conflict { border: 1px solid color-mix(in srgb, var(--yellow) 55%, var(--surface1)); border-radius: var(--r-md); padding: 4px 8px; font-size: var(--fs-sm); margin-bottom: 6px; }
   .fw-conflict p { margin: 0 0 4px; color: var(--yellow); }
   .fw-cf { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
