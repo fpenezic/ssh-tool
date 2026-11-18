@@ -332,7 +332,7 @@ func TestExportLeavesCatalogOut(t *testing.T) {
 
 func TestCatalogAddRefusesTheSameServerTwice(t *testing.T) {
 	ca := newCatalogApp(t)
-	_, err := ca.a.CatalogAdd(ca.cat.BaseURL + "/")
+	_, err := ca.a.CatalogAdd(ca.cat.BaseURL+"/", "")
 	if err == nil || !strings.Contains(err.Error(), "already attached") {
 		t.Fatalf("second attachment: %v", err)
 	}

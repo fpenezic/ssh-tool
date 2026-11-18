@@ -66,7 +66,10 @@ type memTokens struct{ rt string }
 func (m *memTokens) Load() (string, error) { return m.rt, nil }
 func (m *memTokens) Save(rt string) error  { m.rt = rt; return nil }
 
-func (a *App) enrollClient(baseURL string, tokens catalog.TokenStore) (*catalog.Client, string, error) {
+// enrollClient is a client for a catalog being added with a code. Its
+// traffic goes through networkProfileID, or, when that is "" and the
+// server is already attached, through the network that catalog uses.
+func (a *App) enrollClient(baseURL string, tokens catalog.TokenStore, networkProfileID string) (*catalog.Client, string, error) {
 	u, err := catalog.ValidateBaseURL(baseURL)
 	if err != nil {
 		return nil, "", err
@@ -76,6 +79,16 @@ func (a *App) enrollClient(baseURL string, tokens catalog.TokenStore) (*catalog.
 		return nil, "", err
 	}
 	c.DeviceName = catalogDeviceName()
+	if networkProfileID == "" {
+		if cats, err := a.db.ListCatalogs(); err == nil {
+			for _, x := range cats {
+				if catalog.SameServer(x.BaseURL, u) {
+					networkProfileID = a.catalogNetwork(x.ID)
+				}
+			}
+		}
+	}
+	a.useCatalogNetwork(c, networkProfileID)
 	return c, u, nil
 }
 
@@ -94,12 +107,12 @@ func enrollError(err error) error {
 
 // CatalogEnrollInspect checks the server and the code and returns what the
 // confirmation shows. Nothing is created or used up.
-func (a *App) CatalogEnrollInspect(baseURL, code string) (*CatalogEnrollPreview, error) {
+func (a *App) CatalogEnrollInspect(baseURL, code, networkProfileID string) (*CatalogEnrollPreview, error) {
 	baseURL, code = strings.TrimSpace(baseURL), strings.TrimSpace(code)
 	if baseURL == "" || code == "" {
 		return nil, fmt.Errorf("a catalog URL and a code are both needed")
 	}
-	c, u, err := a.enrollClient(baseURL, &memTokens{})
+	c, u, err := a.enrollClient(baseURL, &memTokens{}, networkProfileID)
 	if err != nil {
 		return nil, err
 	}
@@ -134,13 +147,13 @@ func (a *App) CatalogEnrollInspect(baseURL, code string) (*CatalogEnrollPreview,
 // CatalogEnrollConfirm redeems the code after the user confirmed. When the
 // server is already attached, replace says to end this machine's session
 // there and use the new one (the rows stay); without it, nothing happens.
-func (a *App) CatalogEnrollConfirm(baseURL, code string, replace bool) (*CatalogInfo, error) {
+func (a *App) CatalogEnrollConfirm(baseURL, code string, replace bool, networkProfileID string) (*CatalogInfo, error) {
 	if a.vault == nil || a.vault.Status().Kind != creds.StatusUnlocked {
 		return nil, fmt.Errorf("unlock the vault first: the catalog sign-in is kept there")
 	}
 	baseURL, code = strings.TrimSpace(baseURL), strings.TrimSpace(code)
 	tmp := &memTokens{}
-	c, u, err := a.enrollClient(baseURL, tmp)
+	c, u, err := a.enrollClient(baseURL, tmp, networkProfileID)
 	if err != nil {
 		return nil, err
 	}
@@ -176,6 +189,7 @@ func (a *App) CatalogEnrollConfirm(baseURL, code string, replace bool) (*Catalog
 			a.revokeTemp(c)
 			return nil, err
 		}
+		a.saveCatalogNetwork(cat, networkProfileID)
 		a.recordAudit("catalog.add", cat.ID, map[string]string{"base_url": u, "via": "enrollment"})
 	} else {
 		// End this machine's previous session there first.

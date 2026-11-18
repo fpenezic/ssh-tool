@@ -9,12 +9,18 @@
   import { api, type CatalogEnrollPreview } from "./api";
   import { catalogs } from "./catalog.svelte";
   import { tree } from "./stores.svelte";
+  import { networkProfiles } from "./networkProfiles.svelte";
   import { toast } from "./toast.svelte.ts";
   import { errMsg } from "./connectErrors";
   import { IconX, IconUsers, IconAlertTriangle, IconLock } from "./iconMap";
 
-  interface Props { url: string; code: string; onClose: () => void }
-  let { url, code, onClose }: Props = $props();
+  interface Props { url: string; code: string; network?: string; onClose: () => void }
+  let { url, code, network = "", onClose }: Props = $props();
+  // The network the catalog is reached through ("" = direct, or the one
+  // an already attached catalog uses).
+  // svelte-ignore state_referenced_locally
+  let netIn = $state(network);
+  networkProfiles.load();
 
   // A link fills both; the form path may need the user to type them.
   // svelte-ignore state_referenced_locally
@@ -33,7 +39,7 @@
     if (!urlIn.trim() || !codeIn.trim()) return;
     busy = true;
     try {
-      preview = await api.catalogEnrollInspect(urlIn.trim(), codeIn.trim());
+      preview = await api.catalogEnrollInspect(urlIn.trim(), codeIn.trim(), netIn);
     } catch (e) {
       err = clean(e);
     } finally {
@@ -48,7 +54,7 @@
     busy = true;
     err = "";
     try {
-      const c = await api.catalogEnrollConfirm(urlIn.trim(), codeIn.trim(), replace);
+      const c = await api.catalogEnrollConfirm(urlIn.trim(), codeIn.trim(), replace, netIn);
       toast.ok(`${c.name}: connected as ${preview.user_name}`);
       await Promise.all([catalogs.load(), tree.load()]);
       onClose();
@@ -66,6 +72,17 @@
   }
 </script>
 
+{#snippet netPick()}
+  {#if networkProfiles.list.length > 0}
+    <label>Network
+      <select bind:value={netIn} onchange={edited} disabled={busy}>
+        <option value="">Direct (or what this catalog already uses)</option>
+        {#each networkProfiles.list as np (np.id)}<option value={np.id}>via {np.name}</option>{/each}
+      </select>
+    </label>
+  {/if}
+{/snippet}
+
 <div class="overlay" role="presentation">
   <div class="modal" role="dialog" aria-modal="true" tabindex="-1"
     onkeydown={(e) => { if (e.key === "Escape" && !busy) onClose(); }}>
@@ -78,6 +95,7 @@
       <p class="hint">A link asked ssh-tool to connect to a catalog. Check what it is before you connect: nothing is sent to it until you do.</p>
       <div class="form">
         <label>Catalog URL <input value={urlIn} disabled /></label>
+        {@render netPick()}
         <button onclick={inspect} disabled={busy || !urlIn.trim() || !codeIn.trim() || !!preview}>Check</button>
       </div>
     {:else}
@@ -85,6 +103,7 @@
       <div class="form">
         <label>Catalog URL <input bind:value={urlIn} oninput={edited} placeholder="https://catalog.example.com" disabled={busy} /></label>
         <label>Code <input bind:value={codeIn} oninput={edited} placeholder="XXXXX-XXXXX-XXXXX-XXXXX" disabled={busy} onkeydown={(e) => e.key === "Enter" && inspect()} /></label>
+        {@render netPick()}
         <button onclick={inspect} disabled={busy || !urlIn.trim() || !codeIn.trim()}>Check</button>
       </div>
     {/if}
@@ -131,6 +150,12 @@
   .warn { color: var(--yellow); font-size: var(--fs-sm); margin: 0; display: flex; gap: 5px; align-items: flex-start; }
   .form { display: flex; flex-direction: column; gap: 6px; }
   .form label { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-sm); }
+  .form input, .form select { background: var(--mantle); color: var(--text); border: 1px solid var(--surface0); border-radius: var(--r-sm); height: var(--ctl-h); padding: 0 0.55rem; font: inherit; box-sizing: border-box; }
+  .form input:focus, .form select:focus { outline: 1px solid var(--blue); border-color: var(--blue); }
+  .form input:disabled { opacity: 0.8; }
+  footer button, .form button { background: var(--surface0); color: var(--text); border: 0; border-radius: var(--r-sm); height: var(--ctl-h); padding: 0 0.9rem; font: inherit; cursor: pointer; }
+  footer button:hover:not(:disabled), .form button:hover:not(:disabled) { background: var(--surface1); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
   .form button { align-self: flex-end; }
   .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0.3rem 0; font-size: var(--fs-sm); }
   .facts dt { color: var(--subtext0); }
@@ -138,5 +163,5 @@
   /* The whole URL, never shortened: a look-alike host must be visible. */
   .url { font-family: var(--font-mono, monospace); word-break: break-all; color: var(--text); }
   footer { display: flex; justify-content: flex-end; gap: 0.5rem; border-top: 1px solid var(--surface0); padding-top: 0.5rem; }
-  button.primary { background: var(--blue); color: var(--base); border: 0; }
+  button.primary { background: var(--blue); color: var(--on-accent); border: 0; font-weight: 600; }
 </style>

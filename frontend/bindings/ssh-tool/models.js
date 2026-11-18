@@ -1533,6 +1533,15 @@ export class CatalogInfo {
              */
             this["icon_image_id"] = undefined;
         }
+        if (!("network_profile_id" in $$source)) {
+            /**
+             * NetworkProfileID: the network profile the catalog's traffic goes
+             * through, "" for direct.
+             * @member
+             * @type {string}
+             */
+            this["network_profile_id"] = "";
+        }
 
         Object.assign(this, $$source);
     }
@@ -1984,6 +1993,86 @@ export class CatalogMatchUndoResult {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new CatalogMatchUndoResult(/** @type {Partial<CatalogMatchUndoResult>} */($$parsedSource));
+    }
+}
+
+/**
+ * CatalogOpenResult tells the frontend what to show for a link.
+ */
+export class CatalogOpenResult {
+    /**
+     * Creates a new CatalogOpenResult instance.
+     * @param {Partial<CatalogOpenResult>} [$$source = {}] - The source object to create the CatalogOpenResult.
+     */
+    constructor($$source = {}) {
+        if (!("status" in $$source)) {
+            /**
+             * Status: "ok" (Kind + ID name the row to reveal), "not_connected"
+             * (ConnectURL is the server's /connect page to offer), "not_found"
+             * (not shared with this account, or no longer in the catalog).
+             * @member
+             * @type {string}
+             */
+            this["status"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["catalog_id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["catalog_name"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * Kind: "folder", "connection" or "slot"; ID the local row id (the
+             * slot's uuid for a slot).
+             * @member
+             * @type {string | undefined}
+             */
+            this["kind"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["id"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["connect_url"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * SyncError: the sync tried for a record not held yet failed, so
+             * "not found" may only mean "not reachable now".
+             * @member
+             * @type {string | undefined}
+             */
+            this["sync_error"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CatalogOpenResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {CatalogOpenResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CatalogOpenResult(/** @type {Partial<CatalogOpenResult>} */($$parsedSource));
     }
 }
 

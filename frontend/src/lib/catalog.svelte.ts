@@ -27,7 +27,7 @@ class CatalogStore {
   focus = $state<{ id: string; panel: "slots" | ""; slot?: string } | null>(null);
   // An enrollment waiting for the user's confirmation (a link, or the
   // "Add with a code" form). Nothing is redeemed until they confirm.
-  enroll = $state<{ url: string; code: string } | null>(null);
+  enroll = $state<{ url: string; code: string; network?: string } | null>(null);
   // Icon images a publish held back for the catalog's upload limit, being
   // sent in the background (per catalog). Shown in the status bar.
   iconUploads = $state<Record<string, { name: string; left: number; total: number; waitingUntil?: number; message?: string }>>({});
@@ -102,8 +102,8 @@ class CatalogStore {
   }
 
   /** Show the enrollment confirmation (code may be empty: typed there). */
-  startEnroll(url: string, code: string) {
-    this.enroll = { url, code };
+  startEnroll(url: string, code: string, network = "") {
+    this.enroll = { url, code, network };
   }
 
   /** Open the Catalogs section in Settings, optionally on one catalog's slots. */
