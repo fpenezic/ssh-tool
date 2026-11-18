@@ -189,7 +189,6 @@ func (a *App) CatalogEnrollConfirm(baseURL, code string, replace bool, networkPr
 			a.revokeTemp(c)
 			return nil, err
 		}
-		a.saveCatalogNetwork(cat, networkProfileID)
 		a.recordAudit("catalog.add", cat.ID, map[string]string{"base_url": u, "via": "enrollment"})
 	} else {
 		// End this machine's previous session there first.
@@ -200,6 +199,14 @@ func (a *App) CatalogEnrollConfirm(baseURL, code string, replace bool, networkPr
 			}
 			rcancel()
 		}
+	}
+	// The network the code was redeemed through is the one the catalog
+	// uses from now on, for a new catalog and a replaced session alike
+	// ("" keeps what an attached catalog has). Saved before the token, so
+	// a failure leaves no session on a route the user did not choose.
+	if err := a.saveCatalogNetwork(cat, networkProfileID); err != nil {
+		a.revokeTemp(c)
+		return nil, err
 	}
 	if err := (vaultTokens{a: a, id: cat.ID}).Save(tmp.rt); err != nil {
 		a.revokeTemp(c)

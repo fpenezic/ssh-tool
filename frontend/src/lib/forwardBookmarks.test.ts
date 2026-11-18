@@ -11,4 +11,11 @@ describe("forwardBookmarks", () => {
     expect(forwardBookmarks(f).map((b) => b.name)).toEqual(["mine", "team"]);
     expect(forwardBookmarks({ bookmarks: [] } as unknown as PortForward)).toEqual([]);
   });
+  it("offers a shared URL listed twice once", () => {
+    const f = {
+      bookmarks: [],
+      catalog_bookmarks: [{ name: "one", url: "https://c.example.com" }, { name: "two", url: "https://c.example.com" }],
+    } as unknown as PortForward;
+    expect(forwardBookmarks(f).map((b) => b.name)).toEqual(["one"]);
+  });
 });

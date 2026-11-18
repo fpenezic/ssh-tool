@@ -203,14 +203,22 @@
     return networkProfiles.list.find((p) => p.id === id)?.name ?? "a VPN profile";
   }
 
+  // One save at a time: a second one while the first still reloads would
+  // compare against the network the form was opened with.
+  let savingConfig = $state(false);
   async function saveConfig() {
-    if (!edit) return;
+    if (!edit || savingConfig) return;
+    savingConfig = true;
     const e = edit;
-    await run(e.id, "Save", async () => {
-      await api.catalogSetConfig(e.id, e.name, e.interval * 60);
-      if (e.network !== e.networkWas) await api.catalogSetNetwork(e.id, e.network);
-    });
-    edit = null;
+    try {
+      await run(e.id, "Save", async () => {
+        await api.catalogSetConfig(e.id, e.name, e.interval * 60);
+        if (e.network !== e.networkWas) await api.catalogSetNetwork(e.id, e.network);
+      });
+      edit = null;
+    } finally {
+      savingConfig = false;
+    }
   }
 
   function onDocClick(e: MouseEvent) {
@@ -335,14 +343,14 @@
           <label>Name <input bind:value={edit.name} /></label>
           <label>Sync every (minutes) <input type="number" min="1" bind:value={edit.interval} /></label>
           <label>Network
-            <select bind:value={edit.network}>
+            <select bind:value={edit.network} disabled={savingConfig}>
               <option value="">Direct</option>
               {#each networkProfiles.list as np (np.id)}<option value={np.id}>via {np.name}</option>{/each}
             </select>
             <span class="hint sub">For a catalog server behind a VPN. Sync now, sign-in and your edits may bring the VPN up; the background sync only uses it when it is already up (or reaches the server directly in the profile's auto mode), otherwise it waits.</span>
           </label>
           <div class="cat-form-actions">
-            <button class="primary" onclick={saveConfig}>Save</button>
+            <button class="primary" onclick={saveConfig} disabled={savingConfig}>{savingConfig ? "Saving..." : "Save"}</button>
             <button onclick={() => (edit = null)}>Cancel</button>
             {#if c.state !== "no_login" && c.state !== "signed_out"}
               <button onclick={() => run(c.id, "Sign out", () => api.catalogSignOut(c.id))}>Sign out</button>

@@ -112,14 +112,14 @@ func (a *App) catalogPublishGuard(catalogID string) error {
 	return nil
 }
 
-// catalogRevision is the server's protocol revision from its meta (0 when
-// it cannot be read: nothing revision-gated is sent then).
+// catalogRevision is the server's protocol revision from a fresh meta (0
+// when it cannot be read: nothing revision-gated is sent then).
 func catalogRevision(ctx context.Context, c *catalog.Client) int {
-	m, err := c.Meta(ctx)
+	r, err := c.FreshRevision(ctx)
 	if err != nil {
 		return 0
 	}
-	return m.Protocol.Revision
+	return r
 }
 
 // catalogSingleConnSupported: a single-connection publish needs a server

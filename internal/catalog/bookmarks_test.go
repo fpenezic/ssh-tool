@@ -16,6 +16,7 @@ func TestSharedBookmarks(t *testing.T) {
 		{Name: "js", URL: "javascript:alert(1)"},
 		{Name: "file", URL: "file:///etc/passwd"},
 		{Name: "nohost", URL: "http:///x"},
+		{Name: "noname-host", URL: "http://:8080/"},
 		{Name: strings.Repeat("n", 201), URL: "https://b.example.com"},
 	}, 9)
 	b, _ := json.Marshal(got)
