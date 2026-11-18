@@ -209,24 +209,21 @@ func (in CatalogPublishInput) options(account string) catalog.PublishOptions {
 }
 
 // publishResolveDyn is a publish's view of an inventory host used as a
-// bastion: what it resolves to now, as a connection.
+// bastion: what it resolves to now, as a connection. The id is a jump
+// chain's reference, "dyn:<folderId>/<externalId>" (resolver.DynRef), not
+// the "dyn:<entryId>" a direct connect uses: reading it as the latter found
+// nothing, and every inventory bastion stayed with the publisher.
 func (a *App) publishResolveDyn(id string) (store.Connection, bool) {
-	entryID, ok := strings.CutPrefix(id, "dyn:")
-	if !ok {
-		return store.Connection{}, false
-	}
-	entry, err := a.db.GetDynamicEntry(entryID)
-	if err != nil || entry == nil {
+	syn, err := a.dynamicHostForRef(id)
+	if err != nil || syn == nil {
 		return store.Connection{}, false
 	}
 	folders, err := a.db.ListFolders()
 	if err != nil {
 		return store.Connection{}, false
 	}
-	syn := a.dynamicConnectionFor(entry, "")
-	syn.ID = id
-	eff := resolver.EffectiveOverrides(syn, folders)
-	return store.Connection{ID: id, Name: entry.Name, Hostname: syn.Hostname, Protocol: "ssh", Overrides: eff}, true
+	eff := resolver.EffectiveOverrides(*syn, folders)
+	return store.Connection{ID: id, Name: syn.Name, Hostname: syn.Hostname, Protocol: "ssh", Overrides: eff}, true
 }
 
 // CatalogPublishPreview builds the plan the dialog shows. Nothing is sent.

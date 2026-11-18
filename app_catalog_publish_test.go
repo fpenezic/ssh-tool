@@ -12,6 +12,7 @@ import (
 
 	"ssh-tool/internal/catalog"
 	"ssh-tool/internal/creds"
+	"ssh-tool/internal/resolver"
 	"ssh-tool/internal/store"
 )
 
@@ -286,5 +287,44 @@ func TestCatalogPublishRefusesAChangedReview(t *testing.T) {
 	res, err := pa.a.CatalogPublish(in)
 	if err != nil || res.Published || !res.Stale {
 		t.Fatalf("result: %+v %v", res, err)
+	}
+}
+
+// A jump chain names an inventory host as "dyn:<folderId>/<externalId>";
+// publish read it as "dyn:<entryId>", found nothing, and kept every
+// inventory bastion with the publisher instead of sending a record.
+func TestPublishResolveDynJumpRef(t *testing.T) {
+	a := newResolveTestApp(t)
+	user := "deploy"
+	port := uint16(2222)
+	folder, err := a.db.CreateFolder(store.NewFolder{
+		Name:     "proxmox",
+		Settings: store.InheritableSettings{Username: &user, Port: &port},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.db.CreateDynamicFolder(store.DynamicFolder{FolderID: folder.ID, Provider: "proxmox", Config: map[string]any{}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.db.ReplaceDynamicEntries(folder.ID, []store.DynamicEntry{{
+		ID: "entry-1", FolderID: folder.ID, ExternalID: "vm/100", Name: "bastion-01",
+		Hostname: "10.0.0.5", Kind: "guest_vm", Raw: json.RawMessage(`{}`),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	ref := resolver.DynRef(folder.ID, "vm/100")
+	b, ok := a.publishResolveDyn(ref)
+	if !ok {
+		t.Fatalf("%s did not resolve", ref)
+	}
+	if b.ID != ref || b.Name != "bastion-01" || b.Hostname != "10.0.0.5" {
+		t.Fatalf("resolved to %+v", b)
+	}
+	if b.Overrides.Username == nil || *b.Overrides.Username != "deploy" || b.Overrides.Port == nil || *b.Overrides.Port != 2222 {
+		t.Fatalf("folder settings not carried: %+v", b.Overrides)
+	}
+	if _, ok := a.publishResolveDyn(resolver.DynRef(folder.ID, "vm/999")); ok {
+		t.Fatal("a host gone from the inventory resolved")
 	}
 }
