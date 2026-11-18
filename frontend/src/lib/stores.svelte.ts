@@ -32,12 +32,15 @@ class TreeStore {
   folders = $state.raw<Folder[]>([]);
   connections = $state.raw<Connection[]>([]);
   // Everything, hidden catalog folders included: checks that must see
-  // every row (jump referrers before a delete) read these, not the tree.
-  private allFolders: Folder[] = [];
-  private allConnections: Connection[] = [];
+  // every row (jump referrers before a delete) and the by-id lookups read
+  // these. Hiding a folder takes it out of the tree, search and Quick
+  // Connect only; a workspace or tab that opens one of its connections
+  // still finds it.
+  private allFolders = $state.raw<Folder[]>([]);
+  private allConnections = $state.raw<Connection[]>([]);
   // Lookups by id and by parent, rebuilt when load() replaces the arrays.
-  private folderIdx = $derived(new Map(this.folders.map((f) => [f.id, f])));
-  private connIdx = $derived(new Map(this.connections.map((c) => [c.id, c])));
+  private folderIdx = $derived(new Map(this.allFolders.map((f) => [f.id, f])));
+  private connIdx = $derived(new Map(this.allConnections.map((c) => [c.id, c])));
   private childIdx = $derived.by(() => {
     const m = new Map<string | null, Folder[]>();
     for (const f of this.folders) {
@@ -157,7 +160,9 @@ class TreeStore {
       }
       this.version++;
       await expandedConnections.load();
-      expandedConnections.prune(new Set(this.folders.map((f) => f.id)));
+      // Against every folder: a hidden one keeps its expansion for when it
+      // is shown again; a deleted one is pruned.
+      expandedConnections.prune(new Set(this.allFolders.map((f) => f.id)));
       await tagFilter.load();
     } catch (e) {
       this.error = String(e);

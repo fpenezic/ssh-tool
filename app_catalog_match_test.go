@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -275,7 +276,7 @@ func TestCatalogMatchDbTargetLogins(t *testing.T) {
 	port := uint16(2222)
 	addr, dbn := "DB:5432", "app"
 	l, err := db.CreateConnection(store.NewConnection{Name: "web", Hostname: "web-1.example.com", Overrides: store.InheritableSettings{Port: &port,
-		DbTargets: []store.DbTarget{{ID: "mine", Name: "main", Addr: &addr, Database: &dbn, CredentialRef: &cred.ID}}}})
+		DbTargets: []store.DbTarget{{ID: "mine", Name: "main", Addr: &addr, Database: &dbn, CredentialRef: &cred.ID}}, DbDefaultTarget: ptr("mine")}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,6 +289,9 @@ func TestCatalogMatchDbTargetLogins(t *testing.T) {
 	}
 	if len(rs.DbTargets) != 1 || rs.DbTargets[0].ID != "t1" || rs.DbTargets[0].CredentialRef == nil || *rs.DbTargets[0].CredentialRef != cred.ID {
 		t.Fatalf("targets: %+v", rs.DbTargets)
+	}
+	if rs.DbDefaultTarget != "t1" {
+		t.Fatalf("default target: %q", rs.DbDefaultTarget)
 	}
 }
 
@@ -377,5 +381,66 @@ func TestCatalogMatchUndoKeepsLaterEdits(t *testing.T) {
 	}
 	if f, _ := db.GetPortForward(ca.fwdID); len(f.Bookmarks) != 1 {
 		t.Fatalf("bookmarks after undo: %+v", f.Bookmarks)
+	}
+}
+
+// The user's own default database becomes the catalog target paired with
+// it; pairing prefers address and database over a same-named target.
+func TestCatalogMatchDbDefaultAndPairingOrder(t *testing.T) {
+	cat := []store.DbTarget{{ID: "t1", Name: "main", Addr: ptr("db-b:5432"), Database: ptr("app")}}
+	local := []store.DbTarget{
+		{ID: "l1", Name: "main", Addr: ptr("db-a:5432"), Database: ptr("app"), CredentialRef: ptr("wrong")},
+		{ID: "l2", Name: "other", Addr: ptr("DB-B:5432"), Database: ptr("app"), CredentialRef: ptr("right")},
+	}
+	got := dbTargetLogins(local, cat)
+	if len(got) != 1 || *got[0].CredentialRef != "right" {
+		t.Fatalf("logins: %+v", got)
+	}
+	if d := dbDefaultOnCatalog("l2", local, cat); d != "t1" {
+		t.Fatalf("default: %q", d)
+	}
+	if d := dbDefaultOnCatalog("l1", local, cat); d != "" {
+		t.Fatalf("unpaired default mapped to %q", d)
+	}
+}
+
+func ptr(s string) *string { return &s }
+
+// A password copy whose reference or journal entry fails is taken back:
+// nothing is left in the vault that Undo would not know about.
+func TestCatalogMatchPasswordCopyFailures(t *testing.T) {
+	for _, mode := range []string{"reference", "journal"} {
+		t.Run(mode, func(t *testing.T) {
+			ca := newCatalogApp(t)
+			a, db, catID := ca.a, ca.a.db, ca.cat.ID
+			port := uint16(2222)
+			l, _ := db.CreateConnection(store.NewConnection{Name: "web", Hostname: "web-1.example.com", Overrides: store.InheritableSettings{Port: &port}})
+			if err := a.SetConnectionPassword(l.ID, "pw"); err != nil {
+				t.Fatal(err)
+			}
+			if mode == "reference" {
+				saved := matchSetKey
+				matchSetKey = func(*store.DB, string, bool, string) error { return fmt.Errorf("boom") }
+				t.Cleanup(func() { matchSetKey = saved })
+			} else {
+				saved := matchSaveJournal
+				matchSaveJournal = func(*sql.Tx, string, []matchJournal) error { return fmt.Errorf("boom") }
+				t.Cleanup(func() { matchSaveJournal = saved })
+			}
+			res, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Passwords != 0 || res.PassSkipped != 1 {
+				t.Fatalf("result: %+v", res)
+			}
+			cc, _ := db.GetConnection(ca.connID)
+			if cc.PasswordVaultKey != nil {
+				t.Fatalf("reference left: %v", *cc.PasswordVaultKey)
+			}
+			if _, ok, _ := a.vault.Get("conn_pass:" + ca.connID); ok {
+				t.Fatal("copy left in the vault")
+			}
+		})
 	}
 }
