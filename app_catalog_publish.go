@@ -112,14 +112,17 @@ func (a *App) catalogPublishGuard(catalogID string) error {
 	return nil
 }
 
-// catalogRevision is the server's protocol revision from a fresh meta (0
-// when it cannot be read: nothing revision-gated is sent then).
-func catalogRevision(ctx context.Context, c *catalog.Client) int {
+// catalogRevision is the server's protocol revision from a fresh meta. A
+// failed read is an error, not revision 0: revision 0 would drop the
+// revision-gated parts the user selected (forward bookmarks) from both the
+// preview and the publish, and the matching review hashes would let that
+// publish through without a word.
+func catalogRevision(ctx context.Context, c *catalog.Client) (int, error) {
 	r, err := c.FreshRevision(ctx)
 	if err != nil {
-		return 0
+		return 0, fmt.Errorf("catalog: read the server's protocol revision: %v", err)
 	}
-	return r
+	return r, nil
 }
 
 // catalogSingleConnSupported: a single-connection publish needs a server
@@ -250,8 +253,11 @@ func (a *App) CatalogPublishPreview(in CatalogPublishInput) (*catalog.PublishPla
 		if c, err := a.catalogClient(cat); err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			opts.Images = catalogImageLimits(ctx, c)
-			opts.Revision = catalogRevision(ctx, c)
-			err := catalogSingleConnSupported(ctx, c, in)
+			rev, err := catalogRevision(ctx, c)
+			if err == nil {
+				opts.Revision = rev
+				err = catalogSingleConnSupported(ctx, c, in)
+			}
 			cancel()
 			if err != nil {
 				return nil, err
@@ -284,8 +290,11 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	opts.ResolveDyn = a.publishResolveDyn
 	mctx, mcancel := context.WithTimeout(context.Background(), 20*time.Second)
 	opts.Images = catalogImageLimits(mctx, c)
-	opts.Revision = catalogRevision(mctx, c)
-	serr := catalogSingleConnSupported(mctx, c, in)
+	rev, serr := catalogRevision(mctx, c)
+	if serr == nil {
+		opts.Revision = rev
+		serr = catalogSingleConnSupported(mctx, c, in)
+	}
 	mcancel()
 	if serr != nil {
 		return nil, serr

@@ -135,9 +135,11 @@ func (a *App) CatalogRecordSave(in catalog.EditInput) (*CatalogSaveResult, error
 	}
 	if in.Kind == catalog.KindForwards {
 		// Shared bookmarks need revision 6: the stored revision is only
-		// updated at sign-in, the server's meta says what it is now.
+		// updated at sign-in, the server's meta says what it is now. When
+		// meta cannot be read the stored revision stays: PlanEdit refuses
+		// bookmarks it cannot send, it does not drop them.
 		mctx, mcancel := context.WithTimeout(context.Background(), 20*time.Second)
-		if r := catalogRevision(mctx, t.client); r > 0 {
+		if r, err := catalogRevision(mctx, t.client); err == nil && r > 0 {
 			cp := *t.cat
 			cp.ProtocolRevision = int64(r)
 			t.cat = &cp
