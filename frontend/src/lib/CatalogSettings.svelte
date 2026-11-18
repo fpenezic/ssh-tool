@@ -62,7 +62,7 @@
   let boundFilter = $state<Record<string, string>>({});
   let flash = $state("");
   let matching = $state<{ id: string; name: string } | null>(null);
-  const needsBinding = (s: CatalogSlotInfo) => s.state === "unbound" && (!s.skipped || !!s.target_gone);
+  const needsBinding = (s: CatalogSlotInfo) => s.state === "unbound" && !s.covered && (!s.skipped || !!s.target_gone);
   function groupByFolder(list: CatalogSlotInfo[]): { folder: string; slots: CatalogSlotInfo[] }[] {
     const m = new Map<string, CatalogSlotInfo[]>();
     for (const s of list) {
@@ -221,7 +221,9 @@
       <span class="slot-name">{s.name}</span>
       <span class="slot-type">{typeLabel[s.type]}</span>
       {#if s.state === "unbound"}
-        {#if s.skipped && !s.target_gone}
+        {#if s.covered}
+          <span class="chip tone-ok" title="Every connection that uses it has your own value (My settings); binding it would still serve records added later">covered by My settings</span>
+        {:else if s.skipped && !s.target_gone}
           <span class="chip" title="Skipped in the connect dialog on this machine; bind it here to use a stored code">skipped - you type the code</span>
         {:else}
           <span class="chip tone-warn">{s.target_gone ? "bound item deleted" : "not bound"}</span>

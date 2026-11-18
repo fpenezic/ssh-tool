@@ -30,6 +30,7 @@ import (
 	"ssh-tool/internal/bitwarden"
 	"ssh-tool/internal/catalog"
 	"ssh-tool/internal/creds"
+	"ssh-tool/internal/resolver"
 	"ssh-tool/internal/store"
 )
 
@@ -212,7 +213,7 @@ func (a *App) catalogInfo(c store.Catalog) CatalogInfo {
 	slots, _ := a.db.ListCatalogSlots(c.ID)
 	info.Slots = len(slots)
 	for _, s := range a.catalogSlotInfos(c.ID, slots) {
-		if s.State == "unbound" {
+		if s.State == "unbound" && !s.Covered {
 			info.Unbound++
 		}
 	}
@@ -734,6 +735,10 @@ type CatalogSlotInfo struct {
 	// Skipped: an unbound slot whose one-time code the user types
 	// themselves on this machine (the connect dialog's skip).
 	Skipped bool `json:"skipped,omitempty"`
+	// Covered: unbound, but no catalog connection uses it any more: each
+	// one that names it has the user's own value (My settings) in its
+	// place. Nothing to bind; binding would still serve new records.
+	Covered bool `json:"covered,omitempty"`
 }
 
 func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []CatalogSlotInfo {
@@ -743,6 +748,7 @@ func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []Ca
 		bound[b.SlotUUID] = b
 	}
 	skipped := a.otpSkipped()
+	needed := a.catalogSlotsInUse(catalogID)
 	out := make([]CatalogSlotInfo, 0, len(slots))
 	for _, s := range slots {
 		info := CatalogSlotInfo{CatalogSlot: s, State: "unbound", Skipped: skipped[catalogID+"/"+s.UUID]}
@@ -769,6 +775,7 @@ func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []Ca
 		_ = a.db.Conn().QueryRow(`SELECT (SELECT COUNT(*) FROM connections WHERE catalog_id = ? AND instr(catalog_json, ?) > 0)
 			+ (SELECT COUNT(*) FROM folders WHERE catalog_id = ? AND instr(catalog_json, ?) > 0)`,
 			catalogID, s.UUID, catalogID, s.UUID).Scan(&info.UsedBy)
+		info.Covered = info.State == "unbound" && !info.TargetGone && info.UsedBy > 0 && needed != nil && !needed[s.UUID]
 		out = append(out, info)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -777,6 +784,44 @@ func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []Ca
 		}
 		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
 	})
+	return out
+}
+
+// catalogSlotsInUse: the slots whose unbound marker is still in the
+// effective settings of some catalog connection (nil when that cannot be
+// told; then nothing counts as covered).
+func (a *App) catalogSlotsInUse(catalogID string) map[string]bool {
+	folders, err := a.db.ListFolders()
+	if err != nil {
+		return nil
+	}
+	conns, err := a.db.ListConnections(nil)
+	if err != nil {
+		return nil
+	}
+	prefix := store.CatalogUnboundRef(catalogID, "")
+	out := map[string]bool{}
+	for _, c := range conns {
+		if c.CatalogID == nil || *c.CatalogID != catalogID || c.CatalogState == "removed" {
+			continue
+		}
+		b, err := json.Marshal(resolver.EffectiveOverrides(c, folders))
+		if err != nil {
+			return nil
+		}
+		for rest := string(b); ; {
+			i := strings.Index(rest, prefix)
+			if i < 0 {
+				break
+			}
+			rest = rest[i+len(prefix):]
+			j := strings.IndexByte(rest, '"')
+			if j < 0 {
+				break
+			}
+			out[rest[:j]] = true
+		}
+	}
 	return out
 }
 

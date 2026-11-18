@@ -1363,6 +1363,7 @@ export interface CatalogSlotInfo {
   target_gone?: boolean;
   used_by: number;
   skipped?: boolean;
+  covered?: boolean;
 }
 
 // An unbound slot a connect needs (CatalogUnboundFor), in connect order.

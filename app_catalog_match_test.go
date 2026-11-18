@@ -467,3 +467,42 @@ func TestCatalogMatchDbNamesCaseSensitive(t *testing.T) {
 		t.Fatalf("default: %q", d)
 	}
 }
+
+// A slot every connection using it covers with the user's own value no
+// longer counts as one to bind.
+func TestCatalogSlotCoveredByMySettings(t *testing.T) {
+	ca := newCatalogApp(t)
+	a, db, catID := ca.a, ca.a.db, ca.cat.ID
+	count := func() (int, bool) {
+		cats, err := a.CatalogList()
+		if err != nil || len(cats) != 1 {
+			t.Fatalf("list: %v %d", err, len(cats))
+		}
+		covered := false
+		for _, s := range a.catalogSlotInfos(catID, mustSlots(t, db, catID)) {
+			if s.UUID == "s1" {
+				covered = s.Covered
+			}
+		}
+		return cats[0].Unbound, covered
+	}
+	if n, cov := count(); n != 1 || cov {
+		t.Fatalf("before: unbound %d covered %v", n, cov)
+	}
+	cred, _ := db.CreateCredential(store.NewCredential{Name: "mine", Kind: store.CredAgent})
+	if err := a.CatalogSetLayer("connections", ca.connID, `{"auth_ref":"`+cred.ID+`"}`); err != nil {
+		t.Fatal(err)
+	}
+	if n, cov := count(); n != 0 || !cov {
+		t.Fatalf("after: unbound %d covered %v", n, cov)
+	}
+}
+
+func mustSlots(t *testing.T, db *store.DB, catID string) []store.CatalogSlot {
+	t.Helper()
+	s, err := db.ListCatalogSlots(catID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
