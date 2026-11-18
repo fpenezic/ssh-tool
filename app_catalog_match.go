@@ -585,6 +585,20 @@ func (m *matchCtx) plan(pairs [][2]string, a *App) *matchOps {
 				if s, ok := f.Interface().(*string); ok && store.IsCatalogRef(*s) {
 					continue
 				}
+				if k == "db_default_target" && len(ec.DbTargets) > 0 {
+					// The user's default names one of their own targets; on
+					// the catalog connection it must name the catalog target
+					// paired with it, or nothing.
+					if !g.IsNil() {
+						continue
+					}
+					cid := dbDefaultOnCatalog(*f.Interface().(*string), el.DbTargets, ec.DbTargets)
+					if cid == "" {
+						continue
+					}
+					val = cid
+					break
+				}
 				if k == "jump_host" {
 					jl := repointJump(f.Interface().(*store.JumpHostOverride), o.repoint)
 					if jumpEqual(jl, ec.JumpHost) {
@@ -938,35 +952,69 @@ func (a *App) matchValue(k string, v json.RawMessage, repoint map[string]string)
 	return out
 }
 
-// dbTargetLogins: for each catalog database target, the user's login from
-// their own target on the same database (same address and database name,
-// else the same name), as overrides of the catalog's entries.
-func dbTargetLogins(local, cat []store.DbTarget) []store.DbTarget {
+// dbTargetPairs pairs each catalog database target with the user's own
+// target for the same database: same address and database name first
+// (over all of them), then the same target name among the user's targets
+// no catalog target matched by address. Catalog target id -> local target.
+func dbTargetPairs(local, cat []store.DbTarget) map[string]store.DbTarget {
 	norm := func(p *string) string {
 		if p == nil {
 			return ""
 		}
 		return strings.ToLower(strings.TrimSpace(*p))
 	}
-	var out []store.DbTarget
+	out := map[string]store.DbTarget{}
+	used := map[int]bool{}
 	for _, ct := range cat {
-		for _, lt := range local {
-			same := norm(lt.Addr) != "" && norm(lt.Addr) == norm(ct.Addr) && norm(lt.Database) == norm(ct.Database)
-			if !same && (strings.TrimSpace(lt.Name) == "" || !strings.EqualFold(strings.TrimSpace(lt.Name), strings.TrimSpace(ct.Name))) {
-				continue
-			}
-			if lt.CredentialRef == nil || store.IsCatalogRef(*lt.CredentialRef) {
+		for i, lt := range local {
+			if !used[i] && norm(lt.Addr) != "" && norm(lt.Addr) == norm(ct.Addr) && norm(lt.Database) == norm(ct.Database) {
+				out[ct.ID], used[i] = lt, true
 				break
 			}
-			if ct.CredentialRef != nil && *ct.CredentialRef == *lt.CredentialRef {
+		}
+	}
+	for _, ct := range cat {
+		if _, ok := out[ct.ID]; ok || strings.TrimSpace(ct.Name) == "" {
+			continue
+		}
+		for i, lt := range local {
+			if !used[i] && strings.EqualFold(strings.TrimSpace(lt.Name), strings.TrimSpace(ct.Name)) {
+				out[ct.ID], used[i] = lt, true
 				break
 			}
-			ref := *lt.CredentialRef
-			out = append(out, store.DbTarget{ID: ct.ID, CredentialRef: &ref, Override: true})
-			break
 		}
 	}
 	return out
+}
+
+// dbTargetLogins: the user's login for each catalog database target their
+// own paired target has one for, as overrides of the catalog's entries.
+func dbTargetLogins(local, cat []store.DbTarget) []store.DbTarget {
+	pairs := dbTargetPairs(local, cat)
+	var out []store.DbTarget
+	for _, ct := range cat {
+		lt, ok := pairs[ct.ID]
+		if !ok || lt.CredentialRef == nil || store.IsCatalogRef(*lt.CredentialRef) {
+			continue
+		}
+		if ct.CredentialRef != nil && *ct.CredentialRef == *lt.CredentialRef {
+			continue
+		}
+		ref := *lt.CredentialRef
+		out = append(out, store.DbTarget{ID: ct.ID, CredentialRef: &ref, Override: true})
+	}
+	return out
+}
+
+// dbDefaultOnCatalog: the user's default database expressed as the catalog
+// target paired with it ("" when none is).
+func dbDefaultOnCatalog(def string, local, cat []store.DbTarget) string {
+	for cid, lt := range dbTargetPairs(local, cat) {
+		if lt.ID == def {
+			return cid
+		}
+	}
+	return ""
 }
 
 func fwdLabel(f store.PortForward) string {
@@ -1291,11 +1339,23 @@ func (a *App) CatalogMatchApply(catalogID string, pairs map[string]string) (*Cat
 		res.Passwords, res.PassSkipped = a.matchCopySecrets(l, c, &j, res.Passwords, res.PassSkipped)
 	}
 	if len(j.VaultCopies) > 0 {
+		var jerr error
 		if runs := a.matchJournals(catalogID); len(runs) > 0 && runs[len(runs)-1].At == j.At {
 			runs[len(runs)-1].VaultCopies = j.VaultCopies
-			if err := a.db.WithTx(func(tx *sql.Tx) error { return saveMatchJournalsTx(tx, catalogID, runs) }); err != nil {
-				log.Printf("match journal: %v", err)
+			jerr = a.db.WithTx(func(tx *sql.Tx) error { return matchSaveJournal(tx, catalogID, runs) })
+		} else {
+			jerr = fmt.Errorf("the run's journal entry is gone")
+		}
+		if jerr != nil {
+			// Undo could not remove copies it has no record of: take them
+			// back now and count them as not copied.
+			log.Printf("match journal (passwords): %v; copies taken back", jerr)
+			for _, v := range j.VaultCopies {
+				a.matchDropCopy(v.Key)
 			}
+			res.PassSkipped += len(j.VaultCopies)
+			res.Passwords -= len(j.VaultCopies)
+			j.VaultCopies = nil
 		}
 	}
 	a.recordAudit("catalog.match", catalogID, map[string]string{"pairs": strconv.Itoa(res.Pairs), "bindings": strconv.Itoa(res.Bindings)})
@@ -1322,16 +1382,46 @@ func (a *App) matchCopySecrets(l, c *store.Connection, j *matchJournal, n, skipp
 			return
 		}
 		if err := set(key); err != nil {
+			// The reference did not land: the copy would be unowned.
 			log.Printf("match: password key: %v", err)
+			_ = a.vault.Delete(key)
 			skipped++
 			return
 		}
 		j.VaultCopies = append(j.VaultCopies, matchVaultJ{Key: key, From: *from})
 		n++
 	}
-	one(l.PasswordVaultKey, c.PasswordVaultKey, "conn_pass:"+c.ID, func(k string) error { return a.db.SetConnectionPasswordKey(c.ID, k) })
-	one(l.VncPasswordVaultKey, c.VncPasswordVaultKey, "conn_vnc_pass:"+c.ID, func(k string) error { return a.db.SetConnectionVncPasswordKey(c.ID, k) })
+	one(l.PasswordVaultKey, c.PasswordVaultKey, "conn_pass:"+c.ID, func(k string) error { return matchSetKey(a.db, c.ID, false, k) })
+	one(l.VncPasswordVaultKey, c.VncPasswordVaultKey, "conn_vnc_pass:"+c.ID, func(k string) error { return matchSetKey(a.db, c.ID, true, k) })
 	return n, skipped
+}
+
+// matchSetKey points a catalog row at its copied password (a variable so a
+// test can make it fail).
+var matchSetKey = func(db *store.DB, id string, vnc bool, key string) error {
+	if vnc {
+		return db.SetConnectionVncPasswordKey(id, key)
+	}
+	return db.SetConnectionPasswordKey(id, key)
+}
+
+// matchSaveJournal writes the journal after the password copies (a
+// variable so a test can make it fail).
+var matchSaveJournal = saveMatchJournalsTx
+
+// matchDropCopy takes back one password copy: the catalog row's reference
+// (conn_pass:<id> / conn_vnc_pass:<id>) and the vault entry.
+func (a *App) matchDropCopy(key string) {
+	col := "password_vault_key"
+	if strings.HasPrefix(key, "conn_vnc_pass:") {
+		col = "vnc_password_vault_key"
+	}
+	if _, err := a.db.Conn().Exec(`UPDATE connections SET `+col+` = NULL WHERE `+col+` = ?`, key); err != nil {
+		log.Printf("match: drop copy reference: %v", err)
+	}
+	if a.vault != nil {
+		_ = a.vault.Delete(key)
+	}
 }
 
 func mergeLayer(before string, settings map[string]json.RawMessage, record map[string]any) (string, error) {
