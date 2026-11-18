@@ -227,8 +227,16 @@ func PlanEdit(db *store.DB, cat *store.Catalog, scope RecordScope, in EditInput,
 			plan.Refusals = append(plan.Refusals, "a forward can share at most 50 bookmarks")
 		}
 		for _, b := range in.Edited.Bookmarks {
-			if len(SharedBookmarks([]store.ProxyBookmark{b})) == 0 {
-				plan.Refusals = append(plan.Refusals, fmt.Sprintf("bookmark %q: a shared bookmark needs a name and an http or https address with a host (no {port} placeholder)", b.Name))
+			if len(SharedBookmarks([]store.ProxyBookmark{b}, int(cat.ProtocolRevision))) == 0 {
+				why := "a shared bookmark needs a name and an http or https address with a host"
+				if strings.Contains(b.URL, "{port}") {
+					if cat.ProtocolRevision < PortPlaceholderRevision {
+						why = "this catalog server takes {port} in a shared bookmark only from protocol revision 9"
+					} else {
+						why = "{port} may stand only once, as the port (http://host:{port}/...)"
+					}
+				}
+				plan.Refusals = append(plan.Refusals, fmt.Sprintf("bookmark %q: %s", b.Name, why))
 			}
 		}
 		if len(plan.Refusals) > 0 {

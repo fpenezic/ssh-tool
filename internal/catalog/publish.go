@@ -998,7 +998,7 @@ func (c *pubCtx) connection(conn store.Connection, folderUUID, copyOf string) er
 		}
 		if c.opts.Revision >= BookmarksRevision && !c.opts.Unsent["bookmarks"] {
 			// in_tree and the like stay local: only name and URL go.
-			pf.Bookmarks = SharedBookmarks(p.Bookmarks)
+			pf.Bookmarks = SharedBookmarks(p.Bookmarks, c.opts.Revision)
 		}
 		c.plan.Request.Forwards = append(c.plan.Request.Forwards, pf)
 		name := p.Description

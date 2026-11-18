@@ -17,19 +17,38 @@ func TestSharedBookmarks(t *testing.T) {
 		{Name: "file", URL: "file:///etc/passwd"},
 		{Name: "nohost", URL: "http:///x"},
 		{Name: strings.Repeat("n", 201), URL: "https://b.example.com"},
-	})
+	}, 9)
 	b, _ := json.Marshal(got)
-	if string(b) != `[{"name":"ui","url":"https://grafana.example.com/d/1"}]` {
+	if string(b) != `[{"name":"ui","url":"https://grafana.example.com/d/1"},{"name":"port","url":"http://127.0.0.1:{port}/"}]` {
 		t.Fatalf("shared %s", b)
 	}
-	if SharedBookmarks(nil) == nil {
+	// {port}: from revision 9, once, as the authority's port only.
+	for u, want := range map[string]bool{
+		"http://127.0.0.1:{port}/admin":       true,
+		"http://[::1]:{port}":                 true,
+		"https://host.example.com:{port}#x":   true,
+		"http://{port}/":                      false,
+		"http://127.0.0.1:8080/{port}":        false,
+		"http://127.0.0.1:8080/?p={port}":     false,
+		"http://127.0.0.1:{port}/{port}":      false,
+		"http://127.0.0.1:{port}x/":           false,
+		"javascript://127.0.0.1:{port}/alert": false,
+	} {
+		if got := len(SharedBookmarks([]store.ProxyBookmark{{Name: "n", URL: u}}, 9)) == 1; got != want {
+			t.Errorf("rev 9 %s: kept %v", u, got)
+		}
+		if len(SharedBookmarks([]store.ProxyBookmark{{Name: "n", URL: u}}, 8)) != 0 {
+			t.Errorf("rev 8 kept %s", u)
+		}
+	}
+	if SharedBookmarks(nil, 6) == nil {
 		t.Fatal("nil instead of an empty list")
 	}
 	var many []store.ProxyBookmark
 	for i := 0; i < 60; i++ {
 		many = append(many, store.ProxyBookmark{Name: "x", URL: "https://x.example.com"})
 	}
-	if n := len(SharedBookmarks(many)); n != 50 {
+	if n := len(SharedBookmarks(many, 6)); n != 50 {
 		t.Fatalf("%d kept", n)
 	}
 }
@@ -74,10 +93,19 @@ func TestPlanEditForwardBookmarks(t *testing.T) {
 	if p := plan(5, add); len(p.Refusals) == 0 || p.Patch != nil {
 		t.Fatalf("revision 5 took bookmarks: %+v", p)
 	}
-	if p := plan(6, func(f *EditForm) {
+	port := func(f *EditForm) {
 		f.Bookmarks = []store.ProxyBookmark{{Name: "local", URL: "http://127.0.0.1:{port}/"}}
-	}); len(p.Refusals) == 0 {
-		t.Fatal("a {port} bookmark was accepted")
+	}
+	if p := plan(8, port); len(p.Refusals) == 0 || !strings.Contains(p.Refusals[0], "revision 9") {
+		t.Fatalf("a {port} bookmark below revision 9: %+v", p.Refusals)
+	}
+	if p := plan(9, port); len(p.Refusals) != 0 || p.Patch == nil {
+		t.Fatalf("a {port} bookmark at revision 9: %+v", p.Refusals)
+	}
+	if p := plan(9, func(f *EditForm) {
+		f.Bookmarks = []store.ProxyBookmark{{Name: "bad", URL: "http://127.0.0.1:8080/{port}"}}
+	}); len(p.Refusals) == 0 || !strings.Contains(p.Refusals[0], "only once, as the port") {
+		t.Fatalf("{port} in the path: %+v", p.Refusals)
 	}
 }
 

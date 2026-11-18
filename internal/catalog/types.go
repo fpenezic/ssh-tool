@@ -173,8 +173,12 @@ func KnownKind(kind string) bool {
 }
 
 // BookmarksRevision is the protocol revision from which a forward record
-// carries shared bookmarks (PROTOCOL 3.4).
-const BookmarksRevision = 6
+// carries shared bookmarks (PROTOCOL 3.4); PortPlaceholderRevision the one
+// from which such a URL may hold "{port}" as the port of its authority.
+const (
+	BookmarksRevision       = 6
+	PortPlaceholderRevision = 9
+)
 
 // Bookmark is a shared forward bookmark: a name and an http(s) URL. The
 // user's own bookmarks (and their in_tree flag) stay local.
@@ -184,18 +188,28 @@ type Bookmark struct {
 }
 
 // SharedBookmarks turns local bookmarks into the shared shape, dropping
-// what the server would refuse (no name, not http/https, too long) and
-// keeping at most 50. Never nil.
-func SharedBookmarks(in []store.ProxyBookmark) []Bookmark {
+// what a server at revision would refuse (no name, not http/https with a
+// host, too long, a "{port}" placeholder below revision 9 or anywhere but
+// the authority's port) and keeping at most 50. Never nil.
+func SharedBookmarks(in []store.ProxyBookmark, revision int) []Bookmark {
 	out := []Bookmark{}
 	for _, b := range in {
 		name, u := strings.TrimSpace(b.Name), strings.TrimSpace(b.URL)
 		if name == "" || len([]rune(name)) > 200 || len(u) > 2048 {
 			continue
 		}
-		// A "{port}" placeholder (a local forward that picks its port at
-		// start) is no URL the server takes: such a bookmark stays local.
-		pu, err := url.Parse(u)
+		// "{port}" (a local forward whose port is picked at start or set
+		// per user) is taken from revision 9, once, as the authority's
+		// port; it is checked with a port in its place. Before that such
+		// a bookmark stays local.
+		check := u
+		if strings.Contains(u, "{port}") {
+			if revision < PortPlaceholderRevision || !portPlaceholderInAuthority(u) {
+				continue
+			}
+			check = strings.Replace(u, "{port}", "1", 1)
+		}
+		pu, err := url.Parse(check)
 		if err != nil || pu.Host == "" || (!strings.EqualFold(pu.Scheme, "http") && !strings.EqualFold(pu.Scheme, "https")) {
 			continue
 		}
@@ -205,4 +219,21 @@ func SharedBookmarks(in []store.ProxyBookmark) []Bookmark {
 		}
 	}
 	return out
+}
+
+// portPlaceholderInAuthority: "{port}" occurs once, as the port of the
+// URL's authority ("http://127.0.0.1:{port}/x", "http://[::1]:{port}").
+func portPlaceholderInAuthority(u string) bool {
+	if strings.Count(u, "{port}") != 1 {
+		return false
+	}
+	_, rest, ok := strings.Cut(u, "://")
+	if !ok {
+		return false
+	}
+	authority := rest
+	if i := strings.IndexAny(rest, "/?#"); i >= 0 {
+		authority = rest[:i]
+	}
+	return strings.HasSuffix(authority, ":{port}") && len(authority) > len(":{port}")
 }
