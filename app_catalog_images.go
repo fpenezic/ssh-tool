@@ -158,7 +158,9 @@ func (a *App) pendingIcons(catID string) ([]pendingIcon, error) {
 
 // startIconUploads starts the background upload for a catalog when it
 // has held-back images and none is running.
-func (a *App) startIconUploads(cat *store.Catalog, c *catalog.Client) {
+// background: started by a background pass, so its dials never start
+// the catalog's VPN tunnel (app_catalog_network.go).
+func (a *App) startIconUploads(cat *store.Catalog, c *catalog.Client, background bool) {
 	pend, err := a.pendingIcons(cat.ID)
 	if err != nil || len(pend) == 0 {
 		return
@@ -169,7 +171,11 @@ func (a *App) startIconUploads(cat *store.Catalog, c *catalog.Client) {
 		j.mu.Unlock()
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	base := context.Background()
+	if background {
+		base = catalogBackground(base)
+	}
+	ctx, cancel := context.WithCancel(base)
 	job := &iconJob{cancel: cancel}
 	j.stop[cat.ID] = job
 	j.mu.Unlock()

@@ -210,7 +210,7 @@ func SharedBookmarks(in []store.ProxyBookmark, revision int) []Bookmark {
 			check = strings.Replace(u, "{port}", "1", 1)
 		}
 		pu, err := url.Parse(check)
-		if err != nil || pu.Host == "" || (!strings.EqualFold(pu.Scheme, "http") && !strings.EqualFold(pu.Scheme, "https")) {
+		if err != nil || pu.Hostname() == "" || (!strings.EqualFold(pu.Scheme, "http") && !strings.EqualFold(pu.Scheme, "https")) {
 			continue
 		}
 		out = append(out, Bookmark{Name: name, URL: u})

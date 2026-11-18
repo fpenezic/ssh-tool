@@ -126,3 +126,18 @@ func SyncServerIcon(ctx context.Context, db *store.DB, cat *store.Catalog, c *Cl
 	}
 	return true, db.SetCatalogRootIcon(cat.RootFolderID, &id)
 }
+
+// FreshRevision reads protocol.revision from a fresh meta: the cached
+// Meta is read once per client and would miss a server upgrade, and a
+// revision gate (shared bookmarks, "{port}") must see the server as it is.
+func (c *Client) FreshRevision(ctx context.Context) (int, error) {
+	var m struct {
+		Protocol struct {
+			Revision int `json:"revision"`
+		} `json:"protocol"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/meta", nil, &m, false); err != nil {
+		return 0, err
+	}
+	return m.Protocol.Revision, nil
+}

@@ -146,7 +146,7 @@ func (a *App) catalogClient(cat *store.Catalog) (*catalog.Client, error) {
 	}
 	c.DeviceName = catalogDeviceName()
 	id := cat.ID
-	c.HTTP = a.catalogHTTPClient(func() string { return a.catalogNetwork(id) })
+	c.HTTP = a.catalogHTTPClient(func() (string, error) { return a.catalogNetworkErr(id) })
 	rt.clients[cat.ID] = c
 	return c, nil
 }
@@ -284,7 +284,13 @@ func (a *App) CatalogAdd(baseURL, networkProfileID string) (*CatalogInfo, error)
 	if err != nil {
 		return nil, err
 	}
-	a.saveCatalogNetwork(cat, networkProfileID)
+	if err := a.saveCatalogNetwork(cat, networkProfileID); err != nil {
+		// Attached, but the next calls would go direct: say so rather
+		// than sign in on a route the user did not choose.
+		EventsEmit("catalog_changed", map[string]any{"catalog_id": cat.ID})
+		info := a.catalogInfo(*cat)
+		return &info, fmt.Errorf("the catalog is attached, but %v; set its Network under Edit, then sign in", err)
+	}
 	a.recordAudit("catalog.add", cat.ID, map[string]string{"base_url": u})
 	EventsEmit("catalog_changed", map[string]any{"catalog_id": cat.ID})
 	go a.catalogIconPass(cat, false)
@@ -637,7 +643,7 @@ func (a *App) catalogImagesPass(cat *store.Catalog, c *catalog.Client, backgroun
 	if _, err := catalog.PruneImages(a.db); err != nil {
 		log.Printf("catalog: prune images: %v", err)
 	}
-	a.startIconUploads(cat, c)
+	a.startIconUploads(cat, c, background)
 }
 
 // startCatalogScheduler runs the background passes. A catalog is synced

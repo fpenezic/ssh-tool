@@ -19,6 +19,7 @@
   import { toast } from "./toast.svelte";
   import { copyText } from "./clipboard";
   import { IconGlobe, IconBookmark, IconUsers, IconAlertTriangle } from "./iconMap";
+  import { sharedBookmarks } from "./forwardBookmarks";
   import { treeBookmarks } from "./treeBookmarks.svelte";
   import { errMsg } from "./connectErrors";
   import { tunnels } from "./tunnels.svelte.ts";
@@ -216,11 +217,8 @@
   // the writer edits them for everyone.
   let recBms = $state<ProxyBookmark[]>([]);
   // A catalog bookmark that one of the user's own already has (same URL)
-  // is not shown twice: theirs is the one with the tree pin.
-  function sharedOnly(spec: PortForward): ProxyBookmark[] {
-    const own = new Set((spec.bookmarks ?? []).map((b) => b.url));
-    return (spec.catalog_bookmarks ?? []).filter((b) => !own.has(b.url));
-  }
+  // is not shown twice (theirs is the one with the tree pin): see
+  // sharedBookmarks.
   let fwConflict = $state<{ input: CatalogEditInput; plan: NonNullable<CatalogSaveResult["plan"]> } | null>(null);
   let addToCatalog = $state(false);
   const fwLocked = $derived(editingCatalogFw && !fwRecordMode);
@@ -1011,7 +1009,7 @@
           </div>
           {#if spec.kind === "dynamic" || spec.kind === "local"}
             <div class="bookmarks">
-              {#each sharedOnly(spec) as bm (bm.url)}
+              {#each sharedBookmarks(spec) as bm (bm.url)}
                 <span class="bm-chip bm-shared" title="Shared in the catalog for everyone with access">
                   <button
                     class="bm-launch bm-launch-active"

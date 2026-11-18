@@ -33,16 +33,25 @@ const catalogNetworkKeyPrefix = "catalog_network:"
 func catalogNetworkKey(catalogID string) string { return catalogNetworkKeyPrefix + catalogID }
 
 // catalogNetwork is the network profile a catalog's traffic goes
-// through, "" for direct.
+// through, "" for direct (or when it cannot be read; a dial uses
+// catalogNetworkErr so a failed read never turns into a direct dial).
 func (a *App) catalogNetwork(catalogID string) string {
+	id, _ := a.catalogNetworkErr(catalogID)
+	return id
+}
+
+func (a *App) catalogNetworkErr(catalogID string) (string, error) {
 	if a.db == nil || catalogID == "" {
-		return ""
+		return "", nil
 	}
 	v, ok, err := a.db.GetSetting(catalogNetworkKey(catalogID))
-	if err != nil || !ok {
-		return ""
+	if err != nil {
+		return "", fmt.Errorf("read the catalog's network setting: %w", err)
 	}
-	return strings.TrimSpace(v)
+	if !ok {
+		return "", nil
+	}
+	return strings.TrimSpace(v), nil
 }
 
 // CatalogSetNetwork routes a catalog's traffic through a network profile,
@@ -103,15 +112,15 @@ var catalogTunnelDial = func(a *App, profileID string, background bool) (func(ct
 // says which network profile to use at dial time ("" = direct), so a
 // change of the setting needs no new client for dials, only for kept
 // connections (dropCatalogClient closes those).
-func (a *App) catalogHTTPClient(profile func() string) *http.Client {
+func (a *App) catalogHTTPClient(profile func() (string, error)) *http.Client {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	direct := tr.DialContext
 	envProxy := tr.Proxy
 	// Through a tunnel the profile is the route: an environment proxy
 	// would take the request (and its token) somewhere else.
 	tr.Proxy = func(r *http.Request) (*url.URL, error) {
-		if profile() != "" {
-			return nil, nil
+		if id, err := profile(); err != nil || id != "" {
+			return nil, err
 		}
 		if envProxy == nil {
 			return nil, nil
@@ -120,7 +129,10 @@ func (a *App) catalogHTTPClient(profile func() string) *http.Client {
 	}
 	tr.IdleConnTimeout = 30 * time.Second
 	tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		id := profile()
+		id, err := profile()
+		if err != nil {
+			return nil, err
+		}
 		if id == "" {
 			return direct(ctx, network, addr)
 		}
@@ -150,16 +162,18 @@ func (a *App) catalogWaitingVPNMsg(catalogID string) string {
 // useCatalogNetwork puts a new (not yet saved) catalog's client on a
 // chosen profile; Add and the enrollment use it before the row exists.
 func (a *App) useCatalogNetwork(c *catalog.Client, profileID string) {
-	c.HTTP = a.catalogHTTPClient(func() string { return profileID })
+	c.HTTP = a.catalogHTTPClient(func() (string, error) { return profileID, nil })
 }
 
-// saveCatalogNetwork stores the profile chosen while adding a catalog.
-func (a *App) saveCatalogNetwork(cat *store.Catalog, profileID string) {
+// saveCatalogNetwork stores the profile chosen while adding a catalog (or
+// replacing its session with a code). "" keeps what is stored.
+func (a *App) saveCatalogNetwork(cat *store.Catalog, profileID string) error {
 	if profileID == "" || cat == nil {
-		return
+		return nil
 	}
 	if err := a.db.SetSetting(catalogNetworkKey(cat.ID), profileID); err != nil {
-		return
+		return fmt.Errorf("save the catalog's network: %w", err)
 	}
 	a.dropCatalogClient(cat.ID)
+	return nil
 }
