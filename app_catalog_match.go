@@ -957,17 +957,25 @@ func (a *App) matchValue(k string, v json.RawMessage, repoint map[string]string)
 // (over all of them), then the same target name among the user's targets
 // no catalog target matched by address. Catalog target id -> local target.
 func dbTargetPairs(local, cat []store.DbTarget) map[string]store.DbTarget {
+	// Host names ignore case; database names do not (PostgreSQL's quoted
+	// "App" and "app" are two databases).
 	norm := func(p *string) string {
 		if p == nil {
 			return ""
 		}
 		return strings.ToLower(strings.TrimSpace(*p))
 	}
+	exact := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return strings.TrimSpace(*p)
+	}
 	out := map[string]store.DbTarget{}
 	used := map[int]bool{}
 	for _, ct := range cat {
 		for i, lt := range local {
-			if !used[i] && norm(lt.Addr) != "" && norm(lt.Addr) == norm(ct.Addr) && norm(lt.Database) == norm(ct.Database) {
+			if !used[i] && norm(lt.Addr) != "" && norm(lt.Addr) == norm(ct.Addr) && exact(lt.Database) == exact(ct.Database) {
 				out[ct.ID], used[i] = lt, true
 				break
 			}

@@ -444,3 +444,26 @@ func TestCatalogMatchPasswordCopyFailures(t *testing.T) {
 		})
 	}
 }
+
+// Database names compare exactly (host names do not): "App" and "app" on
+// one server are two databases and keep their own logins.
+func TestCatalogMatchDbNamesCaseSensitive(t *testing.T) {
+	cat := []store.DbTarget{
+		{ID: "tA", Name: "upper", Addr: ptr("db:5432"), Database: ptr("App")},
+		{ID: "ta", Name: "lower", Addr: ptr("db:5432"), Database: ptr("app")},
+	}
+	local := []store.DbTarget{
+		{ID: "la", Name: "x", Addr: ptr("DB:5432"), Database: ptr("app"), CredentialRef: ptr("cred-lower")},
+		{ID: "lA", Name: "y", Addr: ptr("DB:5432"), Database: ptr("App"), CredentialRef: ptr("cred-upper")},
+	}
+	got := map[string]string{}
+	for _, o := range dbTargetLogins(local, cat) {
+		got[o.ID] = *o.CredentialRef
+	}
+	if got["tA"] != "cred-upper" || got["ta"] != "cred-lower" {
+		t.Fatalf("logins: %v", got)
+	}
+	if d := dbDefaultOnCatalog("la", local, cat); d != "ta" {
+		t.Fatalf("default: %q", d)
+	}
+}
