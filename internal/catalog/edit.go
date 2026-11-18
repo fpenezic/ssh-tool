@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -53,6 +54,9 @@ type EditForm struct {
 	RemotePort  *uint16 `json:"remote_port"`
 	AutoStart   bool    `json:"auto_start"`
 	Description string  `json:"description"`
+	// Bookmarks: the forward's shared bookmarks (revision 6). The user's
+	// own stay on the local row and are not part of the record.
+	Bookmarks []store.ProxyBookmark `json:"bookmarks"`
 }
 
 // FormOf reads a stored record into the editor's terms.
@@ -78,6 +82,9 @@ func FormOf(db *store.DB, catalogID, kind string, raw json.RawMessage) (EditForm
 	}
 	if f.Tags == nil {
 		f.Tags = []string{}
+	}
+	if f.Bookmarks == nil {
+		f.Bookmarks = []store.ProxyBookmark{}
 	}
 	f.IconImageID = ""
 	if f.IconImage != nil {
@@ -125,7 +132,17 @@ func fieldsOf(kind string, f EditForm) map[string]any {
 	case KindConnections:
 		names = []string{"name", "hostname", "protocol", "tags", "notes", "icon_name", "icon_color", "icon_image", "doc_md"}
 	case KindForwards:
-		names = []string{"kind", "local_addr", "local_port", "remote_host", "remote_port", "auto_start", "description"}
+		names = []string{"kind", "local_addr", "local_port", "remote_host", "remote_port", "auto_start", "description", "bookmarks"}
+	}
+	if kind == KindForwards {
+		// Only name and URL are shared (in_tree is the user's own), and an
+		// absent list is an empty one, so loading and saving unchanged
+		// never reads as an edit.
+		bs := make([]store.ProxyBookmark, 0, len(f.Bookmarks))
+		for _, b := range f.Bookmarks {
+			bs = append(bs, store.ProxyBookmark{Name: strings.TrimSpace(b.Name), URL: strings.TrimSpace(b.URL)})
+		}
+		f.Bookmarks = bs
 	}
 	all := map[string]any{}
 	b, _ := json.Marshal(f)
@@ -200,6 +217,23 @@ func PlanEdit(db *store.DB, cat *store.Catalog, scope RecordScope, in EditInput,
 	plan := &EditPlan{Changed: changed}
 	if len(changed) == 0 {
 		return plan, nil
+	}
+	if in.Kind == KindForwards && slices.Contains(changed, "bookmarks") {
+		if cat.ProtocolRevision < BookmarksRevision {
+			plan.Refusals = append(plan.Refusals, "this catalog server cannot hold shared bookmarks yet (its protocol revision is below 6)")
+			return plan, nil
+		}
+		if len(in.Edited.Bookmarks) > 50 {
+			plan.Refusals = append(plan.Refusals, "a forward can share at most 50 bookmarks")
+		}
+		for _, b := range in.Edited.Bookmarks {
+			if len(SharedBookmarks([]store.ProxyBookmark{b})) == 0 {
+				plan.Refusals = append(plan.Refusals, fmt.Sprintf("bookmark %q: a shared bookmark needs a name and an http or https address with a host (no {port} placeholder)", b.Name))
+			}
+		}
+		if len(plan.Refusals) > 0 {
+			return plan, nil
+		}
 	}
 	if in.Kind == KindConnections && strings.EqualFold(strings.TrimSpace(in.Edited.Protocol), "local") {
 		plan.Refusals = append(plan.Refusals, "a local shell connection cannot be in a catalog (it would run on colleagues' machines)")

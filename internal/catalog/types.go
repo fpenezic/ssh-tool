@@ -11,7 +11,10 @@ package catalog
 
 import (
 	"encoding/json"
+	"net/url"
 	"strings"
+
+	"ssh-tool/internal/store"
 )
 
 // ProtocolMajor is the protocol major version this client speaks; it is
@@ -167,4 +170,39 @@ func KnownKind(kind string) bool {
 		return true
 	}
 	return false
+}
+
+// BookmarksRevision is the protocol revision from which a forward record
+// carries shared bookmarks (PROTOCOL 3.4).
+const BookmarksRevision = 6
+
+// Bookmark is a shared forward bookmark: a name and an http(s) URL. The
+// user's own bookmarks (and their in_tree flag) stay local.
+type Bookmark struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+// SharedBookmarks turns local bookmarks into the shared shape, dropping
+// what the server would refuse (no name, not http/https, too long) and
+// keeping at most 50. Never nil.
+func SharedBookmarks(in []store.ProxyBookmark) []Bookmark {
+	out := []Bookmark{}
+	for _, b := range in {
+		name, u := strings.TrimSpace(b.Name), strings.TrimSpace(b.URL)
+		if name == "" || len([]rune(name)) > 200 || len(u) > 2048 {
+			continue
+		}
+		// A "{port}" placeholder (a local forward that picks its port at
+		// start) is no URL the server takes: such a bookmark stays local.
+		pu, err := url.Parse(u)
+		if err != nil || pu.Host == "" || (!strings.EqualFold(pu.Scheme, "http") && !strings.EqualFold(pu.Scheme, "https")) {
+			continue
+		}
+		out = append(out, Bookmark{Name: name, URL: u})
+		if len(out) == 50 {
+			break
+		}
+	}
+	return out
 }

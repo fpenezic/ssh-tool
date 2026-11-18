@@ -150,6 +150,15 @@ export class EditForm {
              */
             this["description"] = "";
         }
+        if (!("bookmarks" in $$source)) {
+            /**
+             * Bookmarks: the forward's shared bookmarks (revision 6). The user's
+             * own stay on the local row and are not part of the record.
+             * @member
+             * @type {store$0.ProxyBookmark[]}
+             */
+            this["bookmarks"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -162,12 +171,16 @@ export class EditForm {
     static createFrom($$source = {}) {
         const $$createField3_0 = $$createType0;
         const $$createField10_0 = $$createType1;
+        const $$createField18_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField3_0($$parsedSource["tags"]);
         }
         if ("settings" in $$parsedSource) {
             $$parsedSource["settings"] = $$createField10_0($$parsedSource["settings"]);
+        }
+        if ("bookmarks" in $$parsedSource) {
+            $$parsedSource["bookmarks"] = $$createField18_0($$parsedSource["bookmarks"]);
         }
         return new EditForm(/** @type {Partial<EditForm>} */($$parsedSource));
     }
@@ -252,10 +265,10 @@ export class EditInput {
      * @returns {EditInput}
      */
     static createFrom($$source = {}) {
-        const $$createField3_0 = $$createType2;
-        const $$createField4_0 = $$createType2;
-        const $$createField6_0 = $$createType3;
-        const $$createField7_0 = $$createType3;
+        const $$createField3_0 = $$createType4;
+        const $$createField4_0 = $$createType4;
+        const $$createField6_0 = $$createType5;
+        const $$createField7_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("loaded" in $$parsedSource) {
             $$parsedSource["loaded"] = $$createField3_0($$parsedSource["loaded"]);
@@ -328,8 +341,8 @@ export class EditPlan {
      * @returns {EditPlan}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType5;
-        const $$createField1_0 = $$createType7;
+        const $$createField0_0 = $$createType7;
+        const $$createField1_0 = $$createType9;
         const $$createField3_0 = $$createType0;
         const $$createField4_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
@@ -962,14 +975,14 @@ export class PublishPlan {
      * @returns {PublishPlan}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType9;
-        const $$createField1_0 = $$createType5;
-        const $$createField2_0 = $$createType11;
-        const $$createField3_0 = $$createType13;
-        const $$createField4_0 = $$createType15;
+        const $$createField0_0 = $$createType11;
+        const $$createField1_0 = $$createType7;
+        const $$createField2_0 = $$createType13;
+        const $$createField3_0 = $$createType15;
+        const $$createField4_0 = $$createType17;
         const $$createField6_0 = $$createType0;
-        const $$createField7_0 = $$createType17;
-        const $$createField8_0 = $$createType19;
+        const $$createField7_0 = $$createType19;
+        const $$createField8_0 = $$createType21;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("records" in $$parsedSource) {
             $$parsedSource["records"] = $$createField0_0($$parsedSource["records"]);
@@ -1114,21 +1127,23 @@ export class Refusal {
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = store$0.InheritableSettings.createFrom;
-const $$createType2 = EditForm.createFrom;
-const $$createType3 = $Create.Map($Create.Any, $Create.Any);
-const $$createType4 = PlanSlot.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = FieldChange.createFrom;
+const $$createType2 = store$0.ProxyBookmark.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = EditForm.createFrom;
+const $$createType5 = $Create.Map($Create.Any, $Create.Any);
+const $$createType6 = PlanSlot.createFrom;
 const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = PlanRecord.createFrom;
+const $$createType8 = FieldChange.createFrom;
 const $$createType9 = $Create.Array($$createType8);
-const $$createType10 = FreeText.createFrom;
+const $$createType10 = PlanRecord.createFrom;
 const $$createType11 = $Create.Array($$createType10);
-const $$createType12 = Refusal.createFrom;
+const $$createType12 = FreeText.createFrom;
 const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = OutsideJump.createFrom;
+const $$createType14 = Refusal.createFrom;
 const $$createType15 = $Create.Array($$createType14);
-const $$createType16 = KeptRef.createFrom;
+const $$createType16 = OutsideJump.createFrom;
 const $$createType17 = $Create.Array($$createType16);
-const $$createType18 = PlanImage.createFrom;
+const $$createType18 = KeptRef.createFrom;
 const $$createType19 = $Create.Array($$createType18);
+const $$createType20 = PlanImage.createFrom;
+const $$createType21 = $Create.Array($$createType20);

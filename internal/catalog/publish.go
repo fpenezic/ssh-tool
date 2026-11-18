@@ -72,6 +72,10 @@ type PublishOptions struct {
 	// ResolveDyn nil: inventory jumps stay local.
 	ResolveDyn func(id string) (store.Connection, bool) `json:"-"`
 	JumpSkip   map[string]bool
+	// Revision: the server's protocol revision (from a fresh meta). A
+	// forward's bookmarks go only from revision 6 and only when the
+	// "bookmarks" category is ticked (it starts unticked).
+	Revision int
 }
 
 // PublishCategories are the optional parts of a publish, in dialog
@@ -89,6 +93,7 @@ var PublishCategories = []struct {
 	{"tags", nil},
 	{"icons", nil},
 	{"forwards", nil},
+	{"bookmarks", nil},
 	{"database", []string{"db_enabled", "db_engine", "db_addr", "db_name", "db_use_tunnel", "db_default", "db_read_only",
 		"db_query_timeout", "db_tls", "db_credential_ref", "db_label", "db_in_tree", "db_default_target", "db_targets"}},
 	{"kafka", []string{"kafka_enabled", "kafka_bootstrap", "kafka_use_tunnel", "kafka_default", "kafka_read_only", "kafka_tls",
@@ -155,6 +160,8 @@ type PublishForward struct {
 	RemotePort     *uint16 `json:"remote_port"`
 	AutoStart      bool    `json:"auto_start"`
 	Description    string  `json:"description"`
+	// Bookmarks: shared ones (revision 6), only when the user chose to.
+	Bookmarks []Bookmark `json:"bookmarks,omitempty"`
 }
 
 type PublishSlot struct {
@@ -985,13 +992,22 @@ func (c *pubCtx) connection(conn store.Connection, folderUUID, copyOf string) er
 	}
 	for _, p := range c.fwds[conn.ID] {
 		fu := uuid.NewString()
-		c.plan.Request.Forwards = append(c.plan.Request.Forwards, PublishForward{
+		pf := PublishForward{
 			UUID: fu, ConnectionUUID: u, Kind: p.Kind, LocalAddr: p.LocalAddr, LocalPort: p.LocalPort,
 			RemoteHost: p.RemoteHost, RemotePort: p.RemotePort, AutoStart: p.AutoStart, Description: p.Description,
-		})
+		}
+		if c.opts.Revision >= BookmarksRevision && !c.opts.Unsent["bookmarks"] {
+			// in_tree and the like stay local: only name and URL go.
+			pf.Bookmarks = SharedBookmarks(p.Bookmarks)
+		}
+		c.plan.Request.Forwards = append(c.plan.Request.Forwards, pf)
 		name := p.Description
 		if name == "" {
 			name = p.Kind + " forward"
+		}
+		for _, b := range pf.Bookmarks {
+			// A URL can carry a token; it is reviewed like any free text.
+			c.text(KindForwards, fu, name, "bookmark "+b.Name, b.URL, false)
 		}
 		c.plan.Records = append(c.plan.Records, PlanRecord{Kind: KindForwards, UUID: fu, LocalID: p.ID, Name: name,
 			Path: path + "/" + name, ParentLocalID: conn.ID})

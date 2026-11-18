@@ -47,6 +47,7 @@
     { id: "tags", label: "Tags" },
     { id: "icons", label: "Icons", hint: "built-in icons and uploaded images (PNG, JPEG, WebP)" },
     { id: "forwards", label: "Port forwards" },
+    { id: "bookmarks", label: "Forward bookmarks", hint: "the browser bookmarks on your forwards, shared with everyone (catalog servers from protocol revision 6). Off by default: a URL can carry something private; they are listed for review below" },
     { id: "database", label: "Database settings", hint: "listed databases and their logins" },
     { id: "kafka", label: "Kafka settings", hint: "including the Kafka login" },
     { id: "vnc", label: "VNC settings" },
@@ -56,7 +57,9 @@
   ];
   // Not a settings category: the credential choice handled on its own.
   const credChoice = new Set(["shared_creds"]);
-  let send = $state<Record<string, boolean>>(Object.fromEntries(sendCategories.map((c) => [c.id, true])));
+  // Everything starts ticked except forward bookmarks: those go only when
+  // the user chooses to share them.
+  let send = $state<Record<string, boolean>>(Object.fromEntries(sendCategories.map((c) => [c.id, c.id !== "bookmarks"])));
   const unsent = $derived(sendCategories.filter((c) => !credChoice.has(c.id) && !send[c.id]).map((c) => c.id));
   // Credentials (local ids) the user chose not to send.
   let skipCreds = $state<Record<string, boolean>>({});

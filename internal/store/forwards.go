@@ -30,6 +30,10 @@ type PortForward struct {
 	AutoStart    bool            `json:"auto_start"`
 	Description  string          `json:"description"`
 	Bookmarks    []ProxyBookmark `json:"bookmarks"`
+	// CatalogBookmarks: on a catalog forward, the bookmarks the catalog
+	// record shares (revision 6), read only here; Bookmarks stay the
+	// user's own. Not stored apart: read from the record on load.
+	CatalogBookmarks []ProxyBookmark `json:"catalog_bookmarks,omitempty"`
 	// BrowserMode decides how a bookmark on this forward opens:
 	//   ""/"system"  - the user's normal browser, no isolation
 	//   "isolated"   - a throwaway profile, discarded on close
@@ -92,7 +96,7 @@ func (d *DB) GetPortForward(id string) (*PortForward, error) {
 	row := d.conn.QueryRow(
 		`SELECT id, connection_id, kind, local_addr, local_port,
 		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode,
-		        disabled, catalog_id, remote_uuid, remote_rev, catalog_state
+		        disabled, catalog_id, remote_uuid, remote_rev, catalog_state, COALESCE(catalog_json, '')
 		 FROM port_forwards WHERE id = ?`, id,
 	)
 	return scanPortForward(row)
@@ -102,7 +106,7 @@ func (d *DB) ListPortForwards(connectionID string) ([]PortForward, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, connection_id, kind, local_addr, local_port,
 		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode,
-		        disabled, catalog_id, remote_uuid, remote_rev, catalog_state
+		        disabled, catalog_id, remote_uuid, remote_rev, catalog_state, COALESCE(catalog_json, '')
 		 FROM port_forwards WHERE connection_id = ? ORDER BY description`,
 		connectionID,
 	)
@@ -129,7 +133,7 @@ func (d *DB) ListAllPortForwards() ([]PortForward, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, connection_id, kind, local_addr, local_port,
 		        remote_host, remote_port, auto_start, description, bookmarks, browser_mode,
-		        disabled, catalog_id, remote_uuid, remote_rev, catalog_state
+		        disabled, catalog_id, remote_uuid, remote_rev, catalog_state, COALESCE(catalog_json, '')
 		 FROM port_forwards ORDER BY connection_id, description`,
 	)
 	if err != nil {
@@ -278,10 +282,11 @@ func scanPortForward(s scanner) (*PortForward, error) {
 		disabled      int64
 		catalogID     sql.NullString
 		remoteUUID    sql.NullString
+		catalogJSON   string
 	)
 	err := s.Scan(
 		&f.ID, &f.ConnectionID, &f.Kind, &la, &lp, &rh, &rp, &auto, &descRaw, &bookmarksJSON, &browserMode,
-		&disabled, &catalogID, &remoteUUID, &f.RemoteRev, &f.CatalogState,
+		&disabled, &catalogID, &remoteUUID, &f.RemoteRev, &f.CatalogState, &catalogJSON,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -324,6 +329,17 @@ func scanPortForward(s scanner) (*PortForward, error) {
 	}
 	if f.Bookmarks == nil {
 		f.Bookmarks = []ProxyBookmark{}
+	}
+	if catalogID.Valid && catalogJSON != "" {
+		var rec struct {
+			Bookmarks []ProxyBookmark `json:"bookmarks"`
+		}
+		if json.Unmarshal([]byte(catalogJSON), &rec) == nil {
+			for _, b := range rec.Bookmarks {
+				// Shared ones are never pinned in the tree from the record.
+				f.CatalogBookmarks = append(f.CatalogBookmarks, ProxyBookmark{Name: b.Name, URL: b.URL})
+			}
+		}
 	}
 	return &f, nil
 }
