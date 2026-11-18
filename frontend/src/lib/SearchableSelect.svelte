@@ -27,6 +27,37 @@
   let rootEl: HTMLDivElement | undefined = $state();
   let inputEl: HTMLInputElement | undefined = $state();
   let listEl: HTMLDivElement | undefined = $state();
+  let triggerEl: HTMLButtonElement | undefined = $state();
+
+  // The popover is position:fixed, placed from the trigger's box: inside a
+  // modal whose body scrolls (overflow:auto) an absolute popover was cut
+  // off at the modal's edge and showed one row. It opens downward and flips
+  // up when there is more room above; it follows a scroll or resize while
+  // open.
+  let place = $state("");
+  function reposition() {
+    if (!triggerEl) return;
+    const r = triggerEl.getBoundingClientRect();
+    const gap = 2, margin = 8;
+    const below = window.innerHeight - r.bottom - gap - margin;
+    const above = r.top - gap - margin;
+    const up = below < 200 && above > below;
+    const max = Math.max(120, Math.min(320, up ? above : below));
+    const vert = up
+      ? `bottom:${window.innerHeight - r.top + gap}px`
+      : `top:${r.bottom + gap}px`;
+    place = `${vert};left:${r.left}px;width:${r.width}px;max-height:${max}px`;
+  }
+  $effect(() => {
+    if (!open) return;
+    reposition();
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  });
 
   // The label shown on the trigger button - looked up from options
   // every render so changes to value (or the option list) propagate.
@@ -112,13 +143,14 @@
   <button
     type="button"
     class="trigger"
+    bind:this={triggerEl}
     onclick={() => (open ? closeDropdown() : openDropdown())}
   >
     <span class="label">{triggerLabel}</span>
     <span class="chev">▾</span>
   </button>
   {#if open}
-    <div class="popover">
+    <div class="popover" style={place}>
       <input
         bind:this={inputEl}
         bind:value={query}
@@ -180,16 +212,12 @@
   .trigger .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .trigger .chev { color: var(--overlay0); font-size: var(--fs-sm); margin-left: 0.4rem; }
   .popover {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    margin-top: 2px;
+    position: fixed;
     background: var(--base);
     border: 1px solid var(--surface1);
     border-radius: var(--r-sm);
     box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-    z-index: 50;
+    z-index: 1000;
     max-height: 320px;
     display: flex;
     flex-direction: column;

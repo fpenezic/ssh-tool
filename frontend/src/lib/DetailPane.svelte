@@ -2194,7 +2194,7 @@
     <HomePane />
   {:else if folder && folder.catalog_id && !folder.remote_uuid}
     {@const cat = catalogs.byId(folder.catalog_id)}
-    <header class="ed-head">
+    <header>
       <div class="ed-title"><h1><IconUsers size={18} /> <span class="ed-name">{folder.name}</span></h1></div>
       <div class="head-actions"><button onclick={() => catalogs.open(folder.catalog_id)}>Catalog settings</button></div>
     </header>

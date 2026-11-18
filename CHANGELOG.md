@@ -36,6 +36,8 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 - **Context menus no longer swallow the next click**: a click outside an open menu (on a tab, the toolbar, the title bar) now does what it clicks. Before, it only closed the menu, and on the title-bar tabs on Windows it did not even do that.
 - **Export dialog says what goes in**: the options are now ticked for what the export includes (notes, tags, colour tags, icons, local shells, a connection's own credential link), instead of "Leave out of the export" boxes you ticked to remove something. The defaults are the same.
 - **Drag a tab into a window that is already open**: a tab dragged from the main window (or from one detached window to another) onto an open detached window now moves there. Before, it always opened a new window, so a tab could not be moved to the window on the other screen by dragging. Dropped anywhere else outside, it still opens a new window.
+- **Pickers in dialogs show their whole list**: the searchable picker (a Bitwarden, Vaultwarden or KeePass item when creating a credential, and the other searchable lists) was cut off at the edge of a dialog that scrolls, showing only "(inherit)". It now opens over the dialog, and upward when there is more room above.
+- **Settings -> External secrets and Catalogs follow the theme**: their buttons and fields had the browser's own look, which stood out in the light theme. The catalog's header in the connection pane no longer has its button sitting on the divider line.
 
 
 ### LLM (MCP) access

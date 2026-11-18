@@ -4652,7 +4652,7 @@
   </div>
 
   {:else if activeSection === "catalogs"}
-  <div class="group group-wide">
+  <div class="group group-wide panel-controls">
     <CatalogSettings />
   </div>
 
@@ -6044,7 +6044,7 @@
   </div>
 
   {:else if activeSection === "external"}
-  <div class="group group-wide">
+  <div class="group group-wide panel-controls">
     <div class="ext-tabs" role="tablist">
       {#each EXTERNAL_TABS as t (t.id)}
         <button
@@ -8992,6 +8992,51 @@
   }
   button.primary:hover { background: var(--lavender); }
   .ok { color: var(--green); font-size: var(--fs-sm); }
+  /* Panels split out of this file (Bitwarden, Infisical, Catalogs) get
+     none of the scoped control rules above, so their buttons and fields
+     fell back to the browser's own look. These give them the same look;
+     the whole selector sits in :where() (no specificity), so any rule a
+     panel or a child component writes for itself still wins. Buttons with
+     a class of their own (link-like, toggles) are left alone; a plain one
+     has no class at all unless a panel rule could match it. */
+  :global(:where(.panel-controls input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]), .panel-controls select, .panel-controls textarea)) {
+    background: var(--mantle);
+    color: var(--text);
+    border: 1px solid var(--surface0);
+    border-radius: var(--r-sm);
+    padding: 0.35rem 0.55rem;
+    font: inherit;
+    box-sizing: border-box;
+  }
+  :global(:where(.panel-controls input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]), .panel-controls select)) {
+    height: var(--ctl-h);
+    padding-block: 0;
+  }
+  :global(:where(.panel-controls input, .panel-controls select, .panel-controls textarea):focus) {
+    outline: 1px solid var(--blue);
+    border-color: var(--blue);
+  }
+  :global(:where(.panel-controls button:not([class]), .panel-controls button[class^="svelte-"]:not([class*=" "]), .panel-controls button.primary, .panel-controls button.danger)) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    height: var(--ctl-h);
+    padding: 0 0.9rem;
+    box-sizing: border-box;
+    white-space: nowrap;
+    background: var(--surface0);
+    color: var(--text);
+    border: 0;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    font: inherit;
+  }
+  :global(:where(.panel-controls button:not([class]), .panel-controls button[class^="svelte-"]:not([class*=" "]), .panel-controls button.danger):hover) { background: var(--surface1); }
+  :global(:where(.panel-controls button.primary)) { background: var(--blue); color: var(--on-accent); font-weight: 600; }
+  :global(:where(.panel-controls button.primary):hover) { background: var(--lavender); }
+  :global(:where(.panel-controls button.danger)) { color: var(--red); }
+  :global(:where(.panel-controls button):disabled) { opacity: 0.5; cursor: not-allowed; }
   code {
     background: var(--mantle);
     padding: 0.1rem 0.4rem;
