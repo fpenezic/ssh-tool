@@ -80,11 +80,18 @@ func (a *App) enrollClient(baseURL string, tokens catalog.TokenStore, networkPro
 	}
 	c.DeviceName = catalogDeviceName()
 	if networkProfileID == "" {
-		if cats, err := a.db.ListCatalogs(); err == nil {
-			for _, x := range cats {
-				if catalog.SameServer(x.BaseURL, u) {
-					networkProfileID = a.catalogNetwork(x.ID)
+		// A failed lookup must not fall through to direct access: the
+		// server may only be reachable through the attached catalog's VPN.
+		cats, err := a.db.ListCatalogs()
+		if err != nil {
+			return nil, "", fmt.Errorf("look up attached catalogs: %w", err)
+		}
+		for _, x := range cats {
+			if catalog.SameServer(x.BaseURL, u) {
+				if networkProfileID, err = a.catalogNetworkErr(x.ID); err != nil {
+					return nil, "", err
 				}
+				break
 			}
 		}
 	}
