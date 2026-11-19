@@ -137,10 +137,10 @@ github.com/muhlemmer/httpforwarded v0.1.0 h1:x4DLrzXdliq8mprgUMR0olDvHGkou5BJsK/
 github.com/muhlemmer/httpforwarded v0.1.0/go.mod h1:yo9czKedo2pdZhoXe+yDkGVbU0TJ0q9oQ90BVoDEtw0=
 github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=
 github.com/ncruces/go-strftime v1.0.0/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=
-github.com/openpubkey/openpubkey v0.30.0 h1:ryalK2HWR4n7lJ9PjrBsWrcHTJ/5K0CLQVFaDs8pbw8=
-github.com/openpubkey/openpubkey v0.30.0/go.mod h1:ZNVh+S0JnKCqn33bNkgUI1VpuomGv2v5GV9HCsjOZDQ=
-github.com/openpubkey/opkssh v0.19.2 h1:JiuYp518M0WWJ8uAmeHgS48x4zPa7uwghBHE3UUCBkE=
-github.com/openpubkey/opkssh v0.19.2/go.mod h1:POdiLo1i2N//RTxGMAx91661Gyy8zhBc3kghKejUK2U=
+github.com/openpubkey/openpubkey v0.30.1 h1:X97QuksrbHmI2e3k0il7re9gOWUjmjtXqQAMZC4u5b0=
+github.com/openpubkey/openpubkey v0.30.1/go.mod h1:ZNVh+S0JnKCqn33bNkgUI1VpuomGv2v5GV9HCsjOZDQ=
+github.com/openpubkey/opkssh v0.20.0 h1:XBYtBbplxjDyBjqV4kD2Dz9imyw9yt1G7PBORC1jZTQ=
+github.com/openpubkey/opkssh v0.20.0/go.mod h1:9pvhAVYODQ1CpI/pui0kgjXkH5Lju8gNhUonSG2dIYI=
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pierrec/lz4/v4 v4.1.33 h1:GjG1TJ1V4IzKP8L96muuuDNpTwd7D+l2ccXrjAbe014=

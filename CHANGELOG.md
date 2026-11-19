@@ -53,6 +53,9 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 - The dry run now lists every connection an **Overwrite** import points at a different host or port, since such a row keeps its saved password unless the archive restores one; warnings are shown in the preview, not only after applying.
 - Argon2 parameters read from an archive or a vault file are range-checked before deriving a key. Zero values used to fail the import and a huge memory value could crash the app.
 
+### opkssh
+- **opkssh 0.20.0** (OpenPubkey 0.30.1): upstream security fixes, among them a refreshed ID token whose signature was not checked under the `OIDC_REFRESHED` policy and a group policy parsing edge case.
+
 ### VPN
 - **No more login prompts every two minutes while you are away**: when a VPN session that needs a typed one-time code (or a push) expired with a Kafka or Database tab open through it, the tab kept reconnecting in the background and every try started a new VPN login with a new prompt, all night long. A tunnel's own reconnects did the same. Now a login started in the background that does not finish puts the profile on hold, as the app proxy already did: background connections through it fail at once, you get one notice, and everything resumes when you connect the profile or open a connection through it.
 
