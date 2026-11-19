@@ -310,7 +310,7 @@ func StableMachineID() string {
 }
 
 func machineID() (string, error) {
-	for _, p := range []string{"/etc/machine-id", "/var/lib/dbus/machine-id"} {
+	for _, p := range machineIDFiles() {
 		b, err := os.ReadFile(p)
 		if err == nil {
 			s := strings.TrimSpace(string(b))
@@ -330,7 +330,7 @@ func machineID() (string, error) {
 		}
 	}
 	// Fallbacks. Hostname alone is weak but better than a static string.
-	for _, env := range []string{"HOSTNAME", "COMPUTERNAME"} {
+	for _, env := range hostnameEnvs() {
 		if v := os.Getenv(env); v != "" {
 			return v, nil
 		}
@@ -397,4 +397,27 @@ func userID() (string, error) {
 		}
 	}
 	return "ssh-tool-default-user", nil
+}
+
+// machineIDFiles lists the machine-id files to read. None on Windows: a
+// rooted path there resolves against the working directory's drive or share,
+// so an exe started from \\wsl.localhost\<distro>\... read the WSL distro's
+// /etc/machine-id and got a different machine id than the same profile
+// started from the Start menu (another catalog token slot, a presence record
+// that looked like another machine).
+func machineIDFiles() []string {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	return []string{"/etc/machine-id", "/var/lib/dbus/machine-id"}
+}
+
+// hostnameEnvs is the env fallback order. Windows sets COMPUTERNAME for every
+// process; HOSTNAME there comes only from a Unix-style shell (Git Bash,
+// MSYS2), in another case, so it is read last.
+func hostnameEnvs() []string {
+	if runtime.GOOS == "windows" {
+		return []string{"COMPUTERNAME", "HOSTNAME"}
+	}
+	return []string{"HOSTNAME", "COMPUTERNAME"}
 }

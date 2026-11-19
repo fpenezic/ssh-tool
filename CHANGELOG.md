@@ -73,6 +73,9 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 ### Bitwarden / Vaultwarden
 - **The item list no longer comes up empty when an item sits in two collections**. Such an item is listed under both collections, and the duplicate broke the item dropdown in "New credential" and the search results of the picker on a connection.
 
+### Shared catalogs and profile sync
+- **A build started from a WSL folder is the same machine as the installed app** (Windows). It derived its machine id from the WSL distribution's machine-id file, so it asked for a new catalog sign-in (one more device row in the catalog) and saw this machine's own VPN profile as "active on another machine". The installed app's id is unchanged.
+
 ## [1.2.1] - No edge resize on a maximised window
 
 A bugfix release for the compact title bar: a maximised or fullscreen window no longer offers to resize at its edges.
