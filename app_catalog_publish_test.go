@@ -451,3 +451,37 @@ func TestCatalogPublishSlotMoveInReviewHash(t *testing.T) {
 		t.Fatal("published anyway")
 	}
 }
+
+// A publish refused after a slot move: the message says the move stays,
+// and the moved slot is recorded here (its new folder and revision).
+func TestCatalogPublishRefusedAfterSlotMove(t *testing.T) {
+	pa := newPublishApp(t)
+	db := pa.a.db
+	pa.mu.Lock()
+	pa.revision, pa.admin = catalog.CatalogSlotsRevision, true
+	pa.mu.Unlock()
+	opk, _ := db.CreateCredential(store.NewCredential{Name: "my opkssh", Kind: store.CredOpkssh})
+	if _, err := db.Conn().Exec(`UPDATE connections SET overrides_json = json_set(overrides_json, '$.auth_ref', ?) WHERE id = ?`, opk.ID, pa.conn); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.WithTx(func(tx *sql.Tx) error {
+		return db.UpsertCatalogSlotTx(tx, store.CatalogSlot{CatalogID: pa.cat.ID, UUID: "slot-opk", Rev: 1, FolderUUID: "space-a", Type: "cred", Name: "opk", Kind: "slot"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetCatalogBinding(pa.cat.ID, "slot-opk", "cred", opk.ID); err != nil {
+		t.Fatal(err)
+	}
+	in := pa.in()
+	pa.setMode("refuse")
+	res, err := pa.a.CatalogPublish(in)
+	if err != nil || res.Published || !strings.Contains(res.Message, "1 slot(s) moved to the whole catalog before the publish stay there") || strings.Contains(res.Message, "nothing changed here") {
+		t.Fatalf("result: %+v %v", res, err)
+	}
+	slots, _ := db.ListCatalogSlots(pa.cat.ID)
+	for _, sl := range slots {
+		if sl.UUID == "slot-opk" && (sl.FolderUUID != "" || sl.Rev != 2) {
+			t.Fatalf("moved slot not recorded: %+v", sl)
+		}
+	}
+}

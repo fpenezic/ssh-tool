@@ -388,6 +388,34 @@ func (a *applier) upsertForward(it Item) error {
 	return nil
 }
 
+// StoreSlotRecord writes one slot record as the server returned it to the
+// local slot table, nothing else: no materialisation, no cursor. A slot's
+// folder and revision do not change any reference (records name slots by
+// uuid), so a write path that moved one (a publish moving it to the
+// catalog level) can record it at once without rematerialising.
+func StoreSlotRecord(db *store.DB, catalogID string, raw json.RawMessage) error {
+	var s Slot
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return err
+	}
+	str := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return *p
+	}
+	ref := ""
+	if len(s.ExternalRef) > 0 && string(s.ExternalRef) != "null" {
+		ref = string(s.ExternalRef)
+	}
+	return db.WithTx(func(tx *sql.Tx) error {
+		return db.UpsertCatalogSlotTx(tx, store.CatalogSlot{
+			CatalogID: catalogID, UUID: s.UUID, Rev: s.Rev, FolderUUID: s.FolderUUID, Type: s.Type, Name: s.Name,
+			Kind: str(s.Kind), Backend: str(s.Backend), ExternalRefJSON: ref, DocMD: str(s.DocMD),
+		})
+	})
+}
+
 func (a *applier) upsertSlot(it Item) error {
 	var s Slot
 	if err := json.Unmarshal(it.Record, &s); err != nil {
