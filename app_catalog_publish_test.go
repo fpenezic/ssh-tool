@@ -109,7 +109,7 @@ func newPublishApp(t *testing.T) *publishApp {
 				pa.patches = append(pa.patches, r.URL.Path+" "+string(b))
 				pa.order = append(pa.order, "patch")
 				pa.mu.Unlock()
-				_ = json.NewEncoder(w).Encode(map[string]any{"uuid": strings.TrimPrefix(r.URL.Path, "/api/v1/slots/"), "rev": 2, "folder_uuid": nil, "type": "cred", "name": "opk", "kind": "slot", "backend": nil, "external_ref": nil, "doc_md": ""})
+				_ = json.NewEncoder(w).Encode(map[string]any{"record": map[string]any{"uuid": strings.TrimPrefix(r.URL.Path, "/api/v1/slots/"), "rev": 2, "folder_uuid": nil, "type": "cred", "name": "opk", "kind": "slot", "backend": nil, "external_ref": nil, "doc_md": ""}, "warnings": []any{}})
 				return
 			}
 			w.WriteHeader(404)
@@ -404,5 +404,50 @@ func TestCatalogPublishMovesSlotToCatalogLevel(t *testing.T) {
 	}
 	if len(pa.lastRequest.Slots) != 0 {
 		t.Fatalf("a new slot was sent: %+v", pa.lastRequest.Slots)
+	}
+	// The move is applied here at once (not left to the next sync).
+	slots, _ := db.ListCatalogSlots(pa.cat.ID)
+	for _, sl := range slots {
+		if sl.UUID == "slot-opk" && (sl.FolderUUID != "" || sl.Rev != 2) {
+			t.Fatalf("moved slot not applied locally: %+v", sl)
+		}
+	}
+}
+
+// A different slot picked for the move after the preview (bindings
+// changed) is a different plan: the publish is refused as stale.
+func TestCatalogPublishSlotMoveInReviewHash(t *testing.T) {
+	pa := newPublishApp(t)
+	db := pa.a.db
+	pa.mu.Lock()
+	pa.revision, pa.admin = catalog.CatalogSlotsRevision, true
+	pa.mu.Unlock()
+	opk, _ := db.CreateCredential(store.NewCredential{Name: "my opkssh", Kind: store.CredOpkssh})
+	if _, err := db.Conn().Exec(`UPDATE connections SET overrides_json = json_set(overrides_json, '$.auth_ref', ?) WHERE id = ?`, opk.ID, pa.conn); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range []string{"slot-a", "slot-b"} {
+		if err := db.WithTx(func(tx *sql.Tx) error {
+			return db.UpsertCatalogSlotTx(tx, store.CatalogSlot{CatalogID: pa.cat.ID, UUID: u, Rev: 1, FolderUUID: "space-" + u, Type: "cred", Name: u, Kind: "slot"})
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.SetCatalogBinding(pa.cat.ID, "slot-a", "cred", opk.ID); err != nil {
+		t.Fatal(err)
+	}
+	in := pa.in()
+	if err := db.DeleteCatalogBinding(pa.cat.ID, "slot-a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetCatalogBinding(pa.cat.ID, "slot-b", "cred", opk.ID); err != nil {
+		t.Fatal(err)
+	}
+	res, err := pa.a.CatalogPublish(in)
+	if err != nil || !res.Stale {
+		t.Fatalf("want a stale refusal, got %+v %v", res, err)
+	}
+	if pa.postCount() != 0 {
+		t.Fatal("published anyway")
 	}
 }
