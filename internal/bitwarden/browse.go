@@ -145,6 +145,9 @@ func (v *Vault) cipherInfo(c *cipherItem) CipherInfo {
 		info.Name = "<locked>"
 		return info
 	}
+	if c.Key != "" {
+		defer key.zero() // an unwrapped item key; the user / org keys are borrowed
+	}
 	if n, e := decStr(c.Name, key); e == nil {
 		info.Name = n
 	} else {

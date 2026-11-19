@@ -76,7 +76,7 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 - **Items in the trash are no longer offered in the picker**. A credential that already points at one keeps working until the trash is emptied.
 
 ### Shared catalogs and profile sync
-- **A build started from a WSL folder is the same machine as the installed app** (Windows). It derived its machine id from the WSL distribution's machine-id file, so it asked for a new catalog sign-in (one more device row in the catalog) and saw this machine's own VPN profile as "active on another machine". The installed app's id is unchanged.
+- **A build started from a WSL folder is the same machine as the installed app** (Windows). It derived its machine id from the WSL distribution's machine-id file, so it asked for a new catalog sign-in (one more device row in the catalog) and saw this machine's own VPN profile as "active on another machine". The installed app started from the Start menu or a shortcut keeps its id; started from a Unix-style shell (Git Bash, MSYS2) it now gets that same id too, so such a launch signs in to a catalog once more. An auto-unlock file or a pending restore sealed under the old id still opens.
 
 ## [1.2.1] - No edge resize on a maximised window
 

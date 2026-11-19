@@ -1023,8 +1023,7 @@ time and never copied into ssh-tool's own store.
 
 Resolvable fields: the item **password** or **username**, a **custom
 field**, or a native **SSH-key** item's private key (which authenticates
-as a key). Items are referenced by id, so renaming them on the server
-does not break the link.
+as a key). Items are referenced by id, so renaming them on the server does not break the link. An item that sits in two collections is listed under both. Items in the server's trash are not offered; a credential that already points at one keeps working until the trash is emptied. Items saved by newer Bitwarden clients, which carry their own encryption key, work like any other.
 
 **Freshness and offline** mirror KeePass: the vault syncs on unlock and
 re-checks when a cached copy is older than a few minutes; a **Sync**
