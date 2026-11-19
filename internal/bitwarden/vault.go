@@ -93,15 +93,26 @@ func (v *Vault) Forget() {
 	}
 }
 
-// keyFor returns the symmetric key that decrypts a cipher: the org key when the
-// cipher belongs to an organization, else the user key.
+// keyFor returns the symmetric key that decrypts a cipher's fields. The base
+// key is the org key when the cipher belongs to an organization, else the user
+// key. A cipher saved by a newer Bitwarden client carries its own item key
+// (cipher key encryption), wrapped by that base key; its fields are then
+// encrypted with the item key, not the base key.
 func (v *Vault) keyFor(c *cipherItem) (symKey, error) {
-	if c.OrganizationID == "" {
-		return v.userKey, nil
+	base := v.userKey
+	if c.OrganizationID != "" {
+		k, ok := v.orgKeys[c.OrganizationID]
+		if !ok {
+			return symKey{}, fmt.Errorf("bitwarden: no key for organization %s", c.OrganizationID)
+		}
+		base = k
 	}
-	k, ok := v.orgKeys[c.OrganizationID]
-	if !ok {
-		return symKey{}, fmt.Errorf("bitwarden: no key for organization %s", c.OrganizationID)
+	if c.Key == "" {
+		return base, nil
+	}
+	k, err := decryptToSymKey(c.Key, base)
+	if err != nil {
+		return symKey{}, fmt.Errorf("bitwarden: item key of %s: %w", c.ID, err)
 	}
 	return k, nil
 }

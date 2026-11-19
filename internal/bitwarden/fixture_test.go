@@ -99,6 +99,8 @@ type fixture struct {
 	customField string
 	customValue string
 	sshKeyPEM   string // the PEM the ssh item resolves to
+	userKey     symKey
+	orgKey      symKey
 }
 
 // genSSHKeyPEM returns a real, parseable ed25519 private key in PEM form.
@@ -155,6 +157,8 @@ func buildFixture(t *testing.T) fixture {
 		customField: "API-KEY",
 		customValue: "custom-secret-value",
 		sshKeyPEM:   genSSHKeyPEM(t),
+		userKey:     userKey,
+		orgKey:      orgKey,
 	}
 
 	sr := syncResp{

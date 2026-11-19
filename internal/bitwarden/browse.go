@@ -65,6 +65,11 @@ func (v *Vault) Browse() []GroupInfo {
 	orgColCiphers := map[string]map[string][]CipherInfo{} // orgID -> collID -> items
 	for i := range v.ciphers {
 		c := &v.ciphers[i]
+		if c.DeletedDate != nil {
+			// In the trash: not offered in the picker. A credential that
+			// already points at it still resolves until the trash is emptied.
+			continue
+		}
 		info := v.cipherInfo(c)
 		if c.OrganizationID == "" {
 			personal.Ciphers = append(personal.Ciphers, info)

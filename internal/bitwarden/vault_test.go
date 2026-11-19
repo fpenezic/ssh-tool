@@ -1,6 +1,7 @@
 package bitwarden
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -124,5 +125,106 @@ func TestBrowseTree(t *testing.T) {
 	}
 	if !sawSSH {
 		t.Errorf("org SSH key not in uncollected items: %+v", org.Ciphers)
+	}
+}
+
+// addCiphers appends ciphers to the fixture's sync payload.
+func addCiphers(t *testing.T, f *fixture, cs ...cipherItem) {
+	t.Helper()
+	var sr syncResp
+	if err := json.Unmarshal(f.sync, &sr); err != nil {
+		t.Fatal(err)
+	}
+	sr.Ciphers = append(sr.Ciphers, cs...)
+	raw, err := json.Marshal(sr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.sync = raw
+}
+
+// A cipher saved by a newer client carries its own item key, wrapped by the
+// user (or org) key; its fields are encrypted with that item key.
+func TestItemKeyCiphers(t *testing.T) {
+	f := buildFixture(t)
+	personalItem, orgItem := randKey(t), randKey(t)
+	raw := func(k symKey) []byte { return append(append([]byte{}, k.enc...), k.mac...) }
+	addCiphers(t, &f,
+		cipherItem{
+			ID: "cipher-itemkey", Type: cipherTypeLogin,
+			Key:  encSym(t, raw(personalItem), f.userKey),
+			Name: encStr(t, "Item Key Host", personalItem),
+			Login: &loginData{
+				Username: encStr(t, "ik-user", personalItem),
+				Password: encStr(t, "ik-pass", personalItem),
+			},
+			Fields: []fieldData{{Name: encStr(t, "TOKEN", personalItem), Value: encStr(t, "ik-token", personalItem)}},
+		},
+		cipherItem{
+			ID: "cipher-org-itemkey", Type: cipherTypeLogin, OrganizationID: f.orgID,
+			CollectionIDs: []string{f.collID},
+			Key:           encSym(t, raw(orgItem), f.orgKey),
+			Name:          encStr(t, "Org Item Key Host", orgItem),
+			Login:         &loginData{Password: encStr(t, "org-ik-pass", orgItem)},
+		},
+	)
+	v, err := OpenVault(f.sync, testMaster)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ cid, field, want string }{
+		{"cipher-itemkey", FieldPassword, "ik-pass"},
+		{"cipher-itemkey", FieldUsername, "ik-user"},
+		{"cipher-itemkey", "token", "ik-token"},
+		{"cipher-org-itemkey", FieldPassword, "org-ik-pass"},
+		{f.personalCID, FieldPassword, "personal-pass"}, // no item key: unchanged
+	} {
+		got, err := v.Resolve(c.cid, c.field)
+		if err != nil || got != c.want {
+			t.Errorf("Resolve(%s, %s) = %q, %v; want %q", c.cid, c.field, got, err, c.want)
+		}
+	}
+	names := map[string]CipherInfo{}
+	for _, g := range v.Browse() {
+		for _, c := range g.Ciphers {
+			names[c.ID] = c
+		}
+		for _, col := range g.Collections {
+			for _, c := range col.Ciphers {
+				names[c.ID] = c
+			}
+		}
+	}
+	if c := names["cipher-itemkey"]; c.Name != "Item Key Host" || c.Username != "ik-user" || len(c.CustomKeys) != 1 {
+		t.Errorf("browse personal item-key cipher: %+v", c)
+	}
+	if c := names["cipher-org-itemkey"]; c.Name != "Org Item Key Host" || !c.HasPassword {
+		t.Errorf("browse org item-key cipher: %+v", c)
+	}
+}
+
+// An item in the trash is not offered in the picker, but a credential that
+// already points at it still resolves.
+func TestTrashedCipherHiddenFromBrowse(t *testing.T) {
+	f := buildFixture(t)
+	addCiphers(t, &f, cipherItem{
+		ID: "cipher-trashed", Type: cipherTypeLogin,
+		Name:        encStr(t, "Old Host", f.userKey),
+		Login:       &loginData{Password: encStr(t, "old-pass", f.userKey)},
+		DeletedDate: "2026-11-01T10:00:00Z",
+	})
+	v, err := OpenVault(f.sync, testMaster)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range v.Browse() {
+		for _, c := range g.Ciphers {
+			if c.ID == "cipher-trashed" {
+				t.Fatalf("trashed cipher listed in %q", g.Name)
+			}
+		}
+	}
+	if got, err := v.Resolve("cipher-trashed", FieldPassword); err != nil || got != "old-pass" {
+		t.Errorf("Resolve trashed = %q, %v", got, err)
 	}
 }

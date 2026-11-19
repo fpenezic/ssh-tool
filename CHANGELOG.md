@@ -72,6 +72,8 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 
 ### Bitwarden / Vaultwarden
 - **The item list no longer comes up empty when an item sits in two collections**. Such an item is listed under both collections, and the duplicate broke the item dropdown in "New credential" and the search results of the picker on a connection.
+- **Items saved by newer Bitwarden clients open**. Such items carry their own encryption key; they showed as `<locked>` with no fields and could not be used. They now list and resolve like any other item.
+- **Items in the trash are no longer offered in the picker**. A credential that already points at one keeps working until the trash is emptied.
 
 ### Shared catalogs and profile sync
 - **A build started from a WSL folder is the same machine as the installed app** (Windows). It derived its machine id from the WSL distribution's machine-id file, so it asked for a new catalog sign-in (one more device row in the catalog) and saw this machine's own VPN profile as "active on another machine". The installed app's id is unchanged.
