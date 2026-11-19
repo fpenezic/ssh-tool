@@ -351,6 +351,15 @@ func (a *App) McpListGrants() []McpGrantInfo {
 	return out
 }
 
+// mcpNeedSession is the error for a call that names no session. Untagged:
+// the shared handlers below call it on android too (gotcha 100).
+func mcpNeedSession(id string) error {
+	if id == "" {
+		return fmt.Errorf("session is required: pass the session id from list_sessions as \"session\"")
+	}
+	return nil
+}
+
 // grantLevel returns the current grant for a session (mcpGrantNone if not
 // shared). Used by the tool handlers to authorise each call.
 func (a *App) grantLevel(sessionID string) mcpGrantLevel {

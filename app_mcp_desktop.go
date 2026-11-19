@@ -300,14 +300,6 @@ type mcpSession struct {
 	SessionID string `json:"session_id,omitempty" jsonschema:"older name of session; use session"`
 }
 
-// mcpNeedSession is the error for a call that names no session.
-func mcpNeedSession(id string) error {
-	if id == "" {
-		return fmt.Errorf("session is required: pass the session id from list_sessions as \"session\"")
-	}
-	return nil
-}
-
 // sid is the session id the call names, "" when it names none (the
 // handlers then answer that the session is required).
 func (s mcpSession) sid() string {
