@@ -26,16 +26,17 @@ func (m *memTokens) Save(s string) error   { m.mu.Lock(); m.rt = s; m.mu.Unlock(
 // fakeServer is the slice of the catalog protocol the client uses: meta,
 // token (refresh with rotation and reuse detection), whoami, changes.
 type fakeServer struct {
-	t        *testing.T
-	srv      *httptest.Server
-	mu       sync.Mutex
-	access   string
-	refresh  string
-	used     map[string]bool
-	refreshN int32
-	pages    []Feed
-	busy     int // answer this many requests with 429 first
-	sinceLog []string
+	t         *testing.T
+	srv       *httptest.Server
+	mu        sync.Mutex
+	access    string
+	refresh   string
+	used      map[string]bool
+	refreshN  int32
+	pages     []Feed
+	busy      int // answer this many requests with 429 first
+	sinceLog  []string
+	seatsFull bool // answer token requests with 403 seats_full
 }
 
 func newFakeServer(t *testing.T) *fakeServer {
@@ -51,6 +52,11 @@ func newFakeServer(t *testing.T) *fakeServer {
 		atomic.AddInt32(&f.refreshN, 1)
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		if f.seatsFull {
+			w.WriteHeader(403)
+			w.Write([]byte(`{"error":"seats_full","error_description":"All 10 seats of this catalog are taken."}`))
+			return
+		}
 		rt := r.PostForm.Get("refresh_token")
 		if f.used[rt] || rt != f.refresh {
 			// Reuse ends the session (PROTOCOL 10.2).
@@ -370,5 +376,43 @@ func TestSameServer(t *testing.T) {
 		if got := SameServer(c.a, c.b); got != c.same {
 			t.Errorf("%s vs %s: %v", c.a, c.b, got)
 		}
+	}
+}
+
+// Seats full on refresh (revision 11) is not a dead session: the token is
+// kept, the error carries the server's text, and a later refresh works.
+func TestSeatsFullKeepsRefreshToken(t *testing.T) {
+	f := newFakeServer(t)
+	f.seatsFull = true
+	c, toks := newTestClient(t, f, "rt-1")
+	_, err := c.WhoAmI(context.Background())
+	var sf *SeatsFullError
+	if !errors.As(err, &sf) || !strings.Contains(err.Error(), "All 10 seats") {
+		t.Fatalf("want SeatsFullError with the server text, got %v", err)
+	}
+	if errors.Is(err, ErrSignedOut) {
+		t.Fatal("seats full must not sign out")
+	}
+	if rt, _ := toks.Load(); rt != "rt-1" {
+		t.Fatalf("refresh token dropped: %q", rt)
+	}
+	f.mu.Lock()
+	f.seatsFull = false
+	f.mu.Unlock()
+	if _, err := c.WhoAmI(context.Background()); err != nil {
+		t.Fatalf("after a seat frees up: %v", err)
+	}
+}
+
+// Seats full on enrollment is reported with the server's text, not as an
+// invalid code.
+func TestSeatsFullOnEnrollment(t *testing.T) {
+	f := newFakeServer(t)
+	f.seatsFull = true
+	c, _ := newTestClient(t, f, "")
+	err := c.RedeemEnrollment(context.Background(), "ABCD-EFGH")
+	var sf *SeatsFullError
+	if !errors.As(err, &sf) || errors.Is(err, ErrEnrollmentInvalid) {
+		t.Fatalf("want SeatsFullError, got %v", err)
 	}
 }

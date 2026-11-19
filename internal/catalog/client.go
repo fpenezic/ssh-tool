@@ -55,6 +55,28 @@ func (e *RetryAfterError) Error() string {
 // gone). The user has to sign in again.
 var ErrSignedOut = errors.New("catalog: not signed in - sign in to the catalog again")
 
+// SeatsFullError: the catalog refused a refresh or an enrollment because
+// all its licensed seats are taken (protocol revision 11, HTTP 403
+// "seats_full"). The session stays valid at the server, so the refresh
+// token is kept and a later attempt can succeed once a seat is free.
+type SeatsFullError struct{ Message string }
+
+func (e *SeatsFullError) Error() string {
+	if e.Message != "" {
+		return "catalog: " + e.Message
+	}
+	return "catalog: all seats of this catalog are taken"
+}
+
+// seatsFull maps a "seats_full" token error to a SeatsFullError.
+func seatsFull(err error) error {
+	var te *oauthpkce.TokenError
+	if errors.As(err, &te) && te.Code == "seats_full" {
+		return &SeatsFullError{Message: te.Description}
+	}
+	return nil
+}
+
 // TokenStore keeps the refresh token between runs (the vault, under a key
 // scoped to this machine). Load returns "" when there is none.
 type TokenStore interface {
@@ -326,6 +348,10 @@ func (c *Client) token(ctx context.Context, staleGen int) (string, int, error) {
 	// would end the session at the server.
 	tok, err := oauthpkce.Refresh(ctx, c.endpoints(m), m.Auth.ClientID, "", rt)
 	if err != nil {
+		if sf := seatsFull(err); sf != nil {
+			// Not a dead session: keep the refresh token.
+			return "", 0, sf
+		}
 		if oauthpkce.IsInvalidGrant(err) {
 			_ = c.Tokens.Save("")
 			c.access = ""
@@ -623,6 +649,9 @@ func (c *Client) RedeemEnrollment(ctx context.Context, code string) error {
 	}
 	tok, err := oauthpkce.Grant(ctx, c.endpoints(m), form)
 	if err != nil {
+		if sf := seatsFull(err); sf != nil {
+			return sf
+		}
 		var te *oauthpkce.TokenError
 		if errors.As(err, &te) {
 			switch {

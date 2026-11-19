@@ -34,6 +34,7 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 - **Shared bookmarks on catalog forwards** (catalog servers from protocol revision 6): a catalog forward shows the bookmarks its record shares next to your own, and writers edit them under **Catalog record**. Your own bookmarks and their tree pins stay yours. Publishing sends a forward's bookmarks only when you tick **Forward bookmarks** (off by default), and lists their addresses in the free-text review. A bookmark with a `{port}` placeholder can be shared from revision 9.
 - Publishing keeps private Vaultwarden / Bitwarden items out on request: untick shared sources in "What to send", or a single credential in the review. If the folder changes after you reviewed it, the publish stops and shows the new review.
 - A catalog link (`ssh-tool://`) only fills in the enrollment form; nothing contacts the server it names until you click Check.
+- **Catalog seats full**: when every licensed seat of a catalog is taken, the app keeps you signed in and tries again on the next sync, showing the catalog's own message, instead of signing you out; adding a catalog with a code shows that message too instead of calling the code invalid.
 
 ### Interface
 - **Context menus no longer swallow the next click**: a click outside an open menu (on a tab, the toolbar, the title bar) now does what it clicks. Before, it only closed the menu, and on the title-bar tabs on Windows it did not even do that.
