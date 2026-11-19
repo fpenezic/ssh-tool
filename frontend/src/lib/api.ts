@@ -1346,7 +1346,7 @@ export interface CatalogMatchPreview {
   last_run: number;
   last_run_pairs: number;
 }
-export interface CatalogMatchResult { pairs: number; bindings: number; forwards: number; folder: string; passwords: number; passwords_skipped: number }
+export interface CatalogMatchResult { pairs: number; bindings: number; forwards: number; folder: string; passwords: number; passwords_skipped: number; folders_removed?: number }
 
 export interface LocaliseResult {
   folders: number; connections: number; forwards: number; credentials: number;
@@ -1852,8 +1852,8 @@ export const api = {
     G.DynamicEntrySaveAsConnection(dynId, folderId, repoint) as unknown as Promise<{ connection_id: string; repointed: number }>,
   catalogMatchPreview: (id: string, picks: Record<string, string>) =>
     G.CatalogMatchPreview(id, picks) as unknown as Promise<CatalogMatchPreview>,
-  catalogMatchApply: (id: string, pairs: Record<string, string>) =>
-    G.CatalogMatchApply(id, pairs) as unknown as Promise<CatalogMatchResult>,
+  catalogMatchApply: (id: string, pairs: Record<string, string>, removeEmpty: boolean) =>
+    G.CatalogMatchApply(id, pairs, removeEmpty) as unknown as Promise<CatalogMatchResult>,
   catalogMatchUndo: (id: string) => G.CatalogMatchUndo(id) as unknown as Promise<{ pairs: number; kept: number }>,
   catalogRemoveKeepLocal: (id: string) => G.CatalogRemoveKeepLocal(id) as unknown as Promise<LocaliseResult>,
   catalogCopyToLocal: (kind: "folders" | "connections", id: string, targetFolderId: string) =>

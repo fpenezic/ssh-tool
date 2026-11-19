@@ -145,16 +145,21 @@
     return c.value ? `${c.field}: ${c.value}` : c.field;
   }
 
+  // The folders the copies came from go too once they are empty (Undo
+  // brings them back).
+  let removeEmpty = $state(true);
+
   async function apply() {
     busy = true;
     err = "";
     try {
       const m: Record<string, string> = {};
       for (const p of picked) m[p.local.id] = p.catalog.id;
-      const r = await api.catalogMatchApply(catalogId, m);
+      const r = await api.catalogMatchApply(catalogId, m, removeEmpty);
       await Promise.all([tree.load(), workspaces.load()]);
       const extra = [r.bindings ? `${r.bindings} slot${r.bindings === 1 ? "" : "s"} bound` : "", r.forwards ? `${r.forwards} forward${r.forwards === 1 ? "" : "s"}` : "",
-        r.passwords ? `${r.passwords} password${r.passwords === 1 ? "" : "s"}` : "", r.passwords_skipped ? `${r.passwords_skipped} password${r.passwords_skipped === 1 ? "" : "s"} not copied (vault locked)` : ""].filter(Boolean).join(", ");
+        r.passwords ? `${r.passwords} password${r.passwords === 1 ? "" : "s"}` : "", r.passwords_skipped ? `${r.passwords_skipped} password${r.passwords_skipped === 1 ? "" : "s"} not copied (vault locked)` : "",
+        r.folders_removed ? `${r.folders_removed} empty folder${r.folders_removed === 1 ? "" : "s"} removed` : ""].filter(Boolean).join(", ");
       toast.info(`${r.pairs} connection${r.pairs === 1 ? "" : "s"} matched to ${catalogName}${extra ? " - " + extra : ""}. Your copies are in "${r.folder}".`);
       onclose();
     } catch (e) {
@@ -312,6 +317,11 @@
     {/if}
 
     {#if err}<p class="err"><IconAlertTriangle size={13} /> {err}</p>{/if}
+    {#if pv && (pv.pairs?.length ?? 0) > 0}
+      <label class="opt" title="After moving your copies, remove the local folders they leave with nothing in them. Undo brings them back.">
+        <input type="checkbox" bind:checked={removeEmpty} disabled={busy} /> Remove folders left empty
+      </label>
+    {/if}
     <footer>
       {#if pv && pv.last_run}
         {#if confirmUndo}
@@ -366,6 +376,7 @@
   .err { color: var(--red); font-size: var(--fs-sm); margin: 0; display: flex; gap: 5px; }
   footer { display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; border-top: 1px solid var(--surface0); padding-top: 0.5rem; }
   footer .left, .undo-q { margin-right: auto; }
+  .opt { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--subtext1); align-self: flex-end; cursor: pointer; }
   footer button { background: var(--surface0); color: var(--text); border: 0; border-radius: var(--r-sm); height: var(--ctl-h); padding: 0 0.9rem; font: inherit; cursor: pointer; }
   footer button:not(.primary):hover:not(:disabled) { background: var(--surface1); }
   footer button:disabled { opacity: 0.6; cursor: default; }

@@ -106,6 +106,9 @@ type CatalogMatchResult struct {
 	Folder      string `json:"folder"`
 	Passwords   int    `json:"passwords"`
 	PassSkipped int    `json:"passwords_skipped"`
+	// FoldersRemoved: local folders the parked copies left empty, removed
+	// on request (Undo puts them back).
+	FoldersRemoved int `json:"folders_removed"`
 }
 
 // CatalogMatchUndoResult reports an undo.
@@ -1253,6 +1256,9 @@ type matchJournal struct {
 	ConnRefs    []matchTextJ      `json:"conn_refs"`
 	FolderRefs  []matchTextJ      `json:"folder_refs"`
 	VaultCopies []matchVaultJ     `json:"vault_copies"`
+	// RemovedFolders: local folders left empty by the parked copies and
+	// removed, as full rows, children before their parents.
+	RemovedFolders []json.RawMessage `json:"removed_folders,omitempty"`
 }
 
 // matchVaultJ: a stored password copied from the local connection's vault
@@ -1301,7 +1307,11 @@ func saveMatchJournalsTx(tx *sql.Tx, catID string, runs []matchJournal) error {
 // CatalogMatchApply matches the given pairs (local id -> catalog conn id,
 // as the preview offered them). The plan is computed again here; a pair
 // the preview would not make now is refused.
-func (a *App) CatalogMatchApply(catalogID string, pairs map[string]string) (*CatalogMatchResult, error) {
+//
+// removeEmpty: local folders the parked copies leave without anything in
+// them (no connection, no subfolder, not a dynamic inventory folder) are
+// removed too, so the old tree does not stay behind as empty shells.
+func (a *App) CatalogMatchApply(catalogID string, pairs map[string]string, removeEmpty bool) (*CatalogMatchResult, error) {
 	if len(pairs) == 0 {
 		return nil, fmt.Errorf("no connections were picked")
 	}
@@ -1330,7 +1340,7 @@ func (a *App) CatalogMatchApply(catalogID string, pairs map[string]string) (*Cat
 	// Read before the transaction: the store has one connection, a read
 	// on it inside the transaction would wait for itself.
 	prior := a.matchJournals(catalogID)
-	err = a.db.WithTx(func(tx *sql.Tx) error { return a.applyMatchTx(tx, m, o, chosen, prior, &j, res) })
+	err = a.db.WithTx(func(tx *sql.Tx) error { return a.applyMatchTx(tx, m, o, chosen, prior, removeEmpty, &j, res) })
 	if err == nil {
 		ext, _ := catalog.PrepareExternal(a.db, m.cat, nil)
 		if merr := catalog.Materialise(a.db, catalogID, ext); merr != nil {
@@ -1472,7 +1482,7 @@ func setLayerTx(tx *sql.Tx, catID, uuid, kind, j string) error {
 	return err
 }
 
-func (a *App) applyMatchTx(tx *sql.Tx, m *matchCtx, o *matchOps, pairs [][2]string, prior []matchJournal, j *matchJournal, res *CatalogMatchResult) error {
+func (a *App) applyMatchTx(tx *sql.Tx, m *matchCtx, o *matchOps, pairs [][2]string, prior []matchJournal, removeEmpty bool, j *matchJournal, res *CatalogMatchResult) error {
 	catID := m.cat.ID
 	for _, p := range pairs {
 		j.Pairs = append(j.Pairs, matchPairJ{Local: p[0], Catalog: p[1]})
@@ -1681,8 +1691,68 @@ func (a *App) applyMatchTx(tx *sql.Tx, m *matchCtx, o *matchOps, pairs [][2]stri
 		}
 		j.Parked = append(j.Parked, matchParkedJ{ID: l.ID, FolderID: l.FolderID, SortOrder: l.SortOrder, Before: before, After: string(b), LastUsed: l.LastUsedAt})
 	}
+	if removeEmpty {
+		if err := removeEmptyMatchFolders(tx, j, park); err != nil {
+			return err
+		}
+		res.FoldersRemoved = len(j.RemovedFolders)
+	}
 
 	return saveMatchJournalsTx(tx, catID, append(prior, *j))
+}
+
+// removeEmptyMatchFolders removes the local folders the parked copies came
+// from, and their ancestors, once nothing is left in them: no connection,
+// no subfolder, no dynamic inventory source. Catalog folders and the park
+// folder are never touched. Each removed row is journalled, children first.
+func removeEmptyMatchFolders(tx *sql.Tx, j *matchJournal, park string) error {
+	seen := map[string]bool{}
+	var queue []string
+	for _, p := range j.Parked {
+		if p.FolderID != nil && !seen[*p.FolderID] {
+			seen[*p.FolderID] = true
+			queue = append(queue, *p.FolderID)
+		}
+	}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if id == park {
+			continue
+		}
+		var parent sql.NullString
+		var local, used int
+		err := tx.QueryRow(`SELECT parent_id, catalog_id IS NULL,
+			(SELECT COUNT(*) FROM connections WHERE folder_id = f.id) +
+			(SELECT COUNT(*) FROM folders WHERE parent_id = f.id) +
+			(SELECT COUNT(*) FROM dynamic_folders WHERE folder_id = f.id)
+			FROM folders f WHERE id = ?`, id).Scan(&parent, &local, &used)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if local == 0 || used > 0 {
+			continue
+		}
+		row, err := rowJSON(tx, "folders", id)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM folders WHERE id = ?`, id); err != nil {
+			return err
+		}
+		j.RemovedFolders = append(j.RemovedFolders, row)
+		if parent.Valid && !seen[parent.String] {
+			seen[parent.String] = true
+			queue = append(queue, parent.String)
+		} else if parent.Valid {
+			// A parent seen before may only now be empty: look again.
+			queue = append(queue, parent.String)
+		}
+	}
+	return nil
 }
 
 // rowJSON reads one row as a column -> value object (for the journal).
@@ -1803,6 +1873,34 @@ func (a *App) undoMatchTx(tx *sql.Tx, catID string, j matchJournal, res *Catalog
 		}
 		if n, _ := r.RowsAffected(); n == 0 {
 			res.Kept++
+		}
+	}
+
+	// Folders the match removed come back first (parents before children),
+	// so the parked copies below find the folder they came from.
+	for i := len(j.RemovedFolders) - 1; i >= 0; i-- {
+		var row map[string]any
+		if err := json.Unmarshal(j.RemovedFolders[i], &row); err != nil {
+			return nil, err
+		}
+		if p, ok := row["parent_id"].(string); ok && p != "" {
+			var n int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM folders WHERE id = ?`, p).Scan(&n); err != nil {
+				return nil, err
+			}
+			if n == 0 {
+				row["parent_id"] = nil
+			}
+		}
+		var cols []string
+		var args []any
+		for k, v := range row {
+			cols = append(cols, k)
+			args = append(args, v)
+		}
+		ph := strings.TrimSuffix(strings.Repeat("?, ", len(cols)), ", ")
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO folders (`+strings.Join(cols, ", ")+`) VALUES (`+ph+`)`, args...); err != nil {
+			return nil, err
 		}
 	}
 

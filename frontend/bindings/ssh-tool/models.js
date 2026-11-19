@@ -1942,6 +1942,15 @@ export class CatalogMatchResult {
              */
             this["passwords_skipped"] = 0;
         }
+        if (!("folders_removed" in $$source)) {
+            /**
+             * FoldersRemoved: local folders the parked copies left empty, removed
+             * on request (Undo puts them back).
+             * @member
+             * @type {number}
+             */
+            this["folders_removed"] = 0;
+        }
 
         Object.assign(this, $$source);
     }

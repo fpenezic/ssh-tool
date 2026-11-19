@@ -35,6 +35,7 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 - Publishing keeps private Vaultwarden / Bitwarden items out on request: untick shared sources in "What to send", or a single credential in the review. If the folder changes after you reviewed it, the publish stops and shows the new review.
 - A catalog link (`ssh-tool://`) only fills in the enrollment form; nothing contacts the server it names until you click Check.
 - **Catalog seats full**: when every licensed seat of a catalog is taken, the app keeps you signed in and tries again on the next sync, showing the catalog's own message, instead of signing you out; adding a catalog with a code shows that message too instead of calling the code invalid.
+- **Match my connections** removes the local folders your copies leave empty (Remove folders left empty, on by default; Undo brings them back), so the old tree does not stay behind as empty folders.
 
 ### Interface
 - **Context menus no longer swallow the next click**: a click outside an open menu (on a tab, the toolbar, the title bar) now does what it clicks. Before, it only closed the menu, and on the title-bar tabs on Windows it did not even do that.

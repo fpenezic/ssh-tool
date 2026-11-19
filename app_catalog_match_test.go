@@ -85,7 +85,7 @@ func TestCatalogMatchApplyAndUndo(t *testing.T) {
 		t.Fatalf("changes: %+v", pv.Pairs[0].Changes)
 	}
 
-	res, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID})
+	res, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestCatalogMatchAmbiguousAndDuplicates(t *testing.T) {
 		t.Fatalf("with a pick: %v %+v", got, pv.Duplicates)
 	}
 	// A pair the preview would not make is refused.
-	if _, err := a.CatalogMatchApply(catID, map[string]string{asRoot: "not-a-record"}); err == nil {
+	if _, err := a.CatalogMatchApply(catID, map[string]string{asRoot: "not-a-record"}, false); err == nil {
 		t.Fatal("a wrong pair was applied")
 	}
 }
@@ -280,7 +280,7 @@ func TestCatalogMatchDbTargetLogins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID}); err != nil {
+	if _, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID}, false); err != nil {
 		t.Fatal(err)
 	}
 	rs, err := resolver.ResolveConnection(db, ca.connID)
@@ -325,7 +325,7 @@ func TestCatalogMatchNoLiftOverDeeperConnections(t *testing.T) {
 	old, _ := db.CreateFolder(store.NewFolder{Name: "Old", Settings: store.InheritableSettings{Username: &me}})
 	l1, _ := db.CreateConnection(store.NewConnection{FolderID: &old.ID, Name: "w1", Hostname: "web-1.example.com", Overrides: store.InheritableSettings{Port: &port}})
 	l2, _ := db.CreateConnection(store.NewConnection{FolderID: &old.ID, Name: "w2", Hostname: "web-2.example.com"})
-	if _, err := a.CatalogMatchApply(catID, map[string]string{l1.ID: ca.connID, l2.ID: "cc2"}); err != nil {
+	if _, err := a.CatalogMatchApply(catID, map[string]string{l1.ID: ca.connID, l2.ID: "cc2"}, false); err != nil {
 		t.Fatal(err)
 	}
 	ovs, _ := db.ListCatalogOverrides(catID)
@@ -356,7 +356,7 @@ func TestCatalogMatchUndoKeepsLaterEdits(t *testing.T) {
 	if _, err := db.CreatePortForward(store.NewPortForward{ConnectionID: l.ID, Kind: "local", LocalPort: &lp, RemoteHost: &host, RemotePort: &rp}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID}); err != nil {
+	if _, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID}, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.SetConnectionPassword(ca.connID, "new"); err != nil {
@@ -427,7 +427,7 @@ func TestCatalogMatchPasswordCopyFailures(t *testing.T) {
 				matchSaveJournal = func(*sql.Tx, string, []matchJournal) error { return fmt.Errorf("boom") }
 				t.Cleanup(func() { matchSaveJournal = saved })
 			}
-			res, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID})
+			res, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID}, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -505,4 +505,62 @@ func mustSlots(t *testing.T, db *store.DB, catID string) []store.CatalogSlot {
 		t.Fatal(err)
 	}
 	return s
+}
+
+// Remove folders left empty: the folders the copy came from go when
+// nothing is left in them (a parent with only that folder too), a folder
+// still holding a connection or an inventory source stays, and Undo puts
+// the removed ones back with the copy in its old place.
+func TestCatalogMatchRemovesEmptyFolders(t *testing.T) {
+	ca := newCatalogApp(t)
+	a, db, catID := ca.a, ca.a.db, ca.cat.ID
+	outer, err := db.CreateFolder(store.NewFolder{Name: "Customer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner, err := db.CreateFolder(store.NewFolder{Name: "Web", ParentID: &outer.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := uint16(2222)
+	l, err := db.CreateConnection(store.NewConnection{FolderID: &inner.ID, Name: "web", Hostname: "web-1.example.com", Overrides: store.InheritableSettings{Port: &port}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keep, err := db.CreateFolder(store.NewFolder{Name: "Keep"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.CreateConnection(store.NewConnection{FolderID: &keep.ID, Name: "other", Hostname: "other.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := a.CatalogMatchApply(catID, map[string]string{l.ID: ca.connID}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.FoldersRemoved != 2 {
+		t.Fatalf("folders removed: %d", res.FoldersRemoved)
+	}
+	for _, id := range []string{inner.ID, outer.ID} {
+		if _, err := db.GetFolder(id); err == nil {
+			t.Fatalf("folder %s left behind", id)
+		}
+	}
+	if _, err := db.GetFolder(keep.ID); err != nil {
+		t.Fatal("a folder with a connection in it was removed")
+	}
+	if _, err := a.CatalogMatchUndo(catID); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := db.GetFolder(inner.ID)
+	if err != nil || fi.ParentID == nil || *fi.ParentID != outer.ID || fi.Name != "Web" {
+		t.Fatalf("inner folder after undo: %+v %v", fi, err)
+	}
+	if _, err := db.GetFolder(outer.ID); err != nil {
+		t.Fatal("outer folder not restored")
+	}
+	back, _ := db.GetConnection(l.ID)
+	if back.FolderID == nil || *back.FolderID != inner.ID {
+		t.Fatalf("copy after undo: folder %v", back.FolderID)
+	}
 }

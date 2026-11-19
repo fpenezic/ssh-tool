@@ -752,12 +752,17 @@ export function CatalogList() {
  * CatalogMatchApply matches the given pairs (local id -> catalog conn id,
  * as the preview offered them). The plan is computed again here; a pair
  * the preview would not make now is refused.
+ * 
+ * removeEmpty: local folders the parked copies leave without anything in
+ * them (no connection, no subfolder, not a dynamic inventory folder) are
+ * removed too, so the old tree does not stay behind as empty shells.
  * @param {string} catalogID
  * @param {{ [_ in string]?: string }} pairs
+ * @param {boolean} removeEmpty
  * @returns {$CancellablePromise<$models.CatalogMatchResult | null>}
  */
-export function CatalogMatchApply(catalogID, pairs) {
-    return $Call.ByID(3297052887, catalogID, pairs).then(/** @type {($result: any) => any} */(($result) => {
+export function CatalogMatchApply(catalogID, pairs, removeEmpty) {
+    return $Call.ByID(3297052887, catalogID, pairs, removeEmpty).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType38($result);
     }));
 }
