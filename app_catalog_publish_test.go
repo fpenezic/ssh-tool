@@ -29,6 +29,7 @@ type publishApp struct {
 	lastRequest catalog.PublishRequest
 	revision    int      // meta's protocol revision (default 1)
 	admin       bool     // whoami admin
+	whoamiFail  bool     // whoami answers 500
 	patches     []string // "<path> <body>" of PATCH requests, in order
 	order       []string // "patch" / "publish", in the order they arrived
 }
@@ -59,8 +60,12 @@ func newPublishApp(t *testing.T) *publishApp {
 			fmt.Fprintf(w, `{"server":{"name":"Fake"},"protocol":{"major":1,"revision":%[2]d},"auth":{"authorization_endpoint":"http://%[1]s/a","token_endpoint":"http://%[1]s/oauth/token","client_id":"ssh-tool"}}`, r.Host, rev)
 		case "/api/v1/whoami":
 			pa.mu.Lock()
-			adm := pa.admin
+			adm, fail := pa.admin, pa.whoamiFail
 			pa.mu.Unlock()
+			if fail {
+				w.WriteHeader(500)
+				return
+			}
 			fmt.Fprintf(w, `{"subject":"s","name":"Bob","groups":[],"admin":%v,"via":"local"}`, adm)
 		case "/oauth/token":
 			fmt.Fprint(w, `{"access_token":"at","token_type":"Bearer","expires_in":3600,"refresh_token":"rt"}`)
@@ -483,5 +488,25 @@ func TestCatalogPublishRefusedAfterSlotMove(t *testing.T) {
 		if sl.UUID == "slot-opk" && (sl.FolderUUID != "" || sl.Rev != 2) {
 			t.Fatalf("moved slot not recorded: %+v", sl)
 		}
+	}
+}
+
+// On a revision-12 server a failed admin check stops the preview and the
+// publish: "not an admin" would quietly put the slots somewhere else than
+// the dialog says.
+func TestCatalogPublishAdminCheckFails(t *testing.T) {
+	pa := newPublishApp(t)
+	pa.mu.Lock()
+	pa.revision, pa.whoamiFail = catalog.CatalogSlotsRevision, true
+	pa.mu.Unlock()
+	in := CatalogPublishInput{CatalogID: pa.cat.ID, FolderID: pa.folder, SlotsAtCatalog: true}
+	if _, err := pa.a.CatalogPublishPreview(in); err == nil || !strings.Contains(err.Error(), "admin") {
+		t.Fatalf("preview: %v", err)
+	}
+	if _, err := pa.a.CatalogPublish(in); err == nil || !strings.Contains(err.Error(), "admin") {
+		t.Fatalf("publish: %v", err)
+	}
+	if pa.postCount() != 0 {
+		t.Fatal("published")
 	}
 }
