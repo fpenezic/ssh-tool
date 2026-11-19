@@ -150,6 +150,9 @@ func (v *Vault) Resolve(cipherID, field string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if c.Key != "" {
+		defer key.zero() // an unwrapped item key; the user / org keys are borrowed
+	}
 	if field == "" {
 		field = FieldPassword
 	}

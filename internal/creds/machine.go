@@ -163,15 +163,10 @@ func ReadSidecar(vaultPath string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		key, err := deriveMachineKey()
-		if err != nil {
-			return "", err
+		if len(nonce) != chacha20poly1305.NonceSizeX {
+			return "", errors.New("sidecar v1: bad nonce length")
 		}
-		aead, err := chacha20poly1305.NewX(key)
-		if err != nil {
-			return "", err
-		}
-		pt, err := aead.Open(nil, nonce, ct, nil)
+		pt, err := openWithMachineKeys(nonce, ct)
 		if err != nil {
 			return "", fmt.Errorf("sidecar v1 decrypt: %w", err)
 		}
@@ -212,21 +207,11 @@ func SealForMachine(plaintext []byte) ([]byte, error) {
 // error when the blob is shorter than the nonce or when the AEAD
 // tag fails (wrong machine, file tampering, etc).
 func OpenForMachine(blob []byte) ([]byte, error) {
-	key, err := deriveMachineKey()
-	if err != nil {
-		return nil, err
-	}
-	aead, err := chacha20poly1305.NewX(key)
-	if err != nil {
-		return nil, err
-	}
-	ns := aead.NonceSize()
+	ns := chacha20poly1305.NonceSizeX
 	if len(blob) < ns {
 		return nil, errors.New("sealed blob too short")
 	}
-	nonce := blob[:ns]
-	ct := blob[ns:]
-	return aead.Open(nil, nonce, ct, nil)
+	return openWithMachineKeys(blob[:ns], blob[ns:])
 }
 
 // SidecarStrengthKind classifies how strongly an existing auto-unlock sidecar
@@ -279,6 +264,48 @@ func deriveMachineKey() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return machineKeyFor(mid)
+}
+
+// machineKeysToOpen returns the current machine key, then the legacy one
+// when the id derivation changed (see legacyMachineID).
+func machineKeysToOpen() ([][]byte, error) {
+	k, err := deriveMachineKey()
+	if err != nil {
+		return nil, err
+	}
+	keys := [][]byte{k}
+	if old := legacyMachineID(); old != "" {
+		if lk, err := machineKeyFor(old); err == nil {
+			keys = append(keys, lk)
+		}
+	}
+	return keys, nil
+}
+
+// openWithMachineKeys opens an XChaCha20-Poly1305 ciphertext with the first
+// machine key that authenticates it.
+func openWithMachineKeys(nonce, ct []byte) ([]byte, error) {
+	keys, err := machineKeysToOpen()
+	if err != nil {
+		return nil, err
+	}
+	var last error
+	for _, key := range keys {
+		aead, err := chacha20poly1305.NewX(key)
+		if err != nil {
+			return nil, err
+		}
+		pt, err := aead.Open(nil, nonce, ct, nil)
+		if err == nil {
+			return pt, nil
+		}
+		last = err
+	}
+	return nil, last
+}
+
+func machineKeyFor(mid string) ([]byte, error) {
 	user, err := userID()
 	if err != nil {
 		return nil, err
@@ -310,7 +337,30 @@ func StableMachineID() string {
 }
 
 func machineID() (string, error) {
-	for _, p := range machineIDFiles() {
+	return machineIDFrom(machineIDFiles(), hostnameEnvs())
+}
+
+// legacyMachineID is the id the derivation gave before Windows skipped the
+// machine-id files and read COMPUTERNAME first, or "" when it is the same
+// as machineID (always, off Windows). Only for opening what an older build
+// sealed: a v1 sidecar, a pending restore.
+func legacyMachineID() string {
+	if machineGOOS != "windows" {
+		return ""
+	}
+	cur, err := machineID()
+	if err != nil {
+		return ""
+	}
+	old, err := machineIDFrom([]string{"/etc/machine-id", "/var/lib/dbus/machine-id"}, []string{"HOSTNAME", "COMPUTERNAME"})
+	if err != nil || old == cur {
+		return ""
+	}
+	return old
+}
+
+func machineIDFrom(files, envs []string) (string, error) {
+	for _, p := range files {
 		b, err := os.ReadFile(p)
 		if err == nil {
 			s := strings.TrimSpace(string(b))
@@ -330,7 +380,7 @@ func machineID() (string, error) {
 		}
 	}
 	// Fallbacks. Hostname alone is weak but better than a static string.
-	for _, env := range hostnameEnvs() {
+	for _, env := range envs {
 		if v := os.Getenv(env); v != "" {
 			return v, nil
 		}
@@ -405,8 +455,12 @@ func userID() (string, error) {
 // /etc/machine-id and got a different machine id than the same profile
 // started from the Start menu (another catalog token slot, a presence record
 // that looked like another machine).
+// machineGOOS is runtime.GOOS; a variable so a test can take the Windows
+// branches of the id derivation.
+var machineGOOS = runtime.GOOS
+
 func machineIDFiles() []string {
-	if runtime.GOOS == "windows" {
+	if machineGOOS == "windows" {
 		return nil
 	}
 	return []string{"/etc/machine-id", "/var/lib/dbus/machine-id"}
@@ -416,7 +470,7 @@ func machineIDFiles() []string {
 // process; HOSTNAME there comes only from a Unix-style shell (Git Bash,
 // MSYS2), in another case, so it is read last.
 func hostnameEnvs() []string {
-	if runtime.GOOS == "windows" {
+	if machineGOOS == "windows" {
 		return []string{"COMPUTERNAME", "HOSTNAME"}
 	}
 	return []string{"HOSTNAME", "COMPUTERNAME"}
