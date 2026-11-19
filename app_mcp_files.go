@@ -126,6 +126,8 @@ func mcpDownloadDest(sessionID, remotePath string) (string, error) {
 // empty panel means the model never asked.
 func (a *App) mcpFileSession(sessionID, action string) (*sshlayer.Session, error) {
 	if err := mcpNeedSession(sessionID); err != nil {
+		a.recordActivity(McpActivity{Kind: "file", Command: action, Exit: "error", Gate: "denied",
+			Output: "refused: no session named"})
 		return nil, err
 	}
 	lvl := a.grantLevel(sessionID)
