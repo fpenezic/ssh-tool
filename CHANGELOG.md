@@ -47,6 +47,7 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 
 
 ### LLM (MCP) access
+- **Claude Desktop can run commands again**: in its local agent mode Claude Desktop drops a tool argument named `session_id`, so `run`, `read_terminal` and the other session tools failed with "session_id missing". They now take `session` (the old name still works, Claude Code is unaffected).
 - **A refused tool call says what arrived**: when a tool's arguments do not fit (one MCP client was reported to lose them), the error and the app log name the argument keys and their types that came in, never their values, so the cause can be seen.
 - **type_into_terminal never presses Enter**: text with a newline or any other control character is now refused. Before, a carriage return in the text submitted the command at once, so the "review it and press Enter yourself" step could be skipped, and under *read + run (YOLO)* that also bypassed the prompt for dangerous commands.
 - **`ip` read-only check is an allowlist**: abbreviated write commands such as `ip r d default` or `ip link c dev eth0 down` were treated as read-only and ran without approval. Now `ip` runs without a prompt only with no command (the default listing) or with `show`, `list`, `lst`, `get` or `help`; everything else, abbreviated `show` included, asks first.

@@ -45,22 +45,22 @@ const (
 )
 
 type mcpKafkaSessionArgs struct {
-	SessionID string `json:"session_id" jsonschema:"the id of a shared Kafka session (kind=kafka in list_sessions)"`
+	mcpSession
 }
 
 type mcpKafkaTopicsArgs struct {
-	SessionID       string `json:"session_id" jsonschema:"the id of a shared Kafka session"`
+	mcpSession
 	Filter          string `json:"filter,omitempty" jsonschema:"case-insensitive substring of the topic name"`
 	IncludeInternal bool   `json:"include_internal,omitempty" jsonschema:"also list internal topics such as __consumer_offsets"`
 }
 
 type mcpKafkaTopicArgs struct {
-	SessionID string `json:"session_id" jsonschema:"the id of a shared Kafka session"`
+	mcpSession
 	Topic     string `json:"topic" jsonschema:"the topic name"`
 }
 
 type mcpKafkaConsumeArgs struct {
-	SessionID   string `json:"session_id" jsonschema:"the id of a shared Kafka session"`
+	mcpSession
 	Topic       string `json:"topic" jsonschema:"the topic to read"`
 	From        string `json:"from,omitempty" jsonschema:"where to start: last (default, the last n records of every partition), newest (the newest n records of the topic as a whole, by record time), earliest, latest (wait for new records), offset, timestamp"`
 	N           int64  `json:"n,omitempty" jsonschema:"for from=last the records per partition, for from=newest the records in all (default 10); for from=offset the offset"`
@@ -73,12 +73,12 @@ type mcpKafkaConsumeArgs struct {
 }
 
 type mcpKafkaGroupArgs struct {
-	SessionID string `json:"session_id" jsonschema:"the id of a shared Kafka session"`
+	mcpSession
 	Group     string `json:"group" jsonschema:"the consumer group name"`
 }
 
 type mcpKafkaProduceArgs struct {
-	SessionID string            `json:"session_id" jsonschema:"the id of a shared Kafka session (read-run)"`
+	mcpSession
 	Topic     string            `json:"topic" jsonschema:"the topic to write to"`
 	Key       *string           `json:"key,omitempty" jsonschema:"record key (omit for a null key)"`
 	Value     *string           `json:"value,omitempty" jsonschema:"record value as text (omit for a null value, a tombstone)"`
@@ -95,8 +95,8 @@ func (a *App) registerKafkaTools(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "open_kafka",
 		Description: "Open the Kafka tab of a connection marked (kafka) in list_connections and " +
-			"share it with you. The user is asked to approve. Returns the session_id for the " +
-			"kafka_* tools.",
+			"share it with you. The user is asked to approve. Returns the session id the " +
+			"kafka_* tools take as session.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpOpenKafkaArgs) (*mcp.CallToolResult, any, error) {
 		return mcpText(a.mcpOpenKafka(in.ConnectionID, in.Level))
 	})
@@ -128,7 +128,7 @@ func (a *App) registerKafkaTools(server *mcp.Server) {
 		Name:        "kafka_list_groups",
 		Description: "List the consumer groups of a shared Kafka session with state, members and total lag.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpKafkaSessionArgs) (*mcp.CallToolResult, any, error) {
-		return mcpText(a.mcpKafkaGroups(in.SessionID))
+		return mcpText(a.mcpKafkaGroups(in.sid()))
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -156,6 +156,9 @@ func mcpText(s string, err error) (*mcp.CallToolResult, any, error) {
 
 // mcpKafkaCluster returns the open handle behind a shared Kafka session.
 func (a *App) mcpKafkaCluster(sessionID string) (*kafkaCluster, mcpGrantLevel, error) {
+	if err := mcpNeedSession(sessionID); err != nil {
+		return nil, mcpGrantNone, err
+	}
 	lvl := a.grantLevel(sessionID)
 	if lvl == mcpGrantNone {
 		return nil, lvl, fmt.Errorf("session not shared with the LLM")
@@ -215,7 +218,7 @@ func (a *App) mcpOpenKafka(connectionID, level string) (string, error) {
 }
 
 func (a *App) mcpKafkaTopics(in mcpKafkaTopicsArgs) (string, error) {
-	kc, _, err := a.mcpKafkaCluster(in.SessionID)
+	kc, _, err := a.mcpKafkaCluster(in.sid())
 	if err != nil {
 		return "", err
 	}
@@ -257,7 +260,7 @@ func countText(n int64) string {
 }
 
 func (a *App) mcpKafkaDescribeTopic(in mcpKafkaTopicArgs) (string, error) {
-	kc, _, err := a.mcpKafkaCluster(in.SessionID)
+	kc, _, err := a.mcpKafkaCluster(in.sid())
 	if err != nil {
 		return "", err
 	}
@@ -317,7 +320,7 @@ func parseMcpTime(s string) (int64, error) {
 }
 
 func (a *App) mcpKafkaConsume(ctx context.Context, in mcpKafkaConsumeArgs) (string, error) {
-	kc, _, err := a.mcpKafkaCluster(in.SessionID)
+	kc, _, err := a.mcpKafkaCluster(in.sid())
 	if err != nil {
 		return "", err
 	}
@@ -517,7 +520,7 @@ func (a *App) mcpKafkaGroups(sessionID string) (string, error) {
 }
 
 func (a *App) mcpKafkaGroup(in mcpKafkaGroupArgs) (string, error) {
-	kc, _, err := a.mcpKafkaCluster(in.SessionID)
+	kc, _, err := a.mcpKafkaCluster(in.sid())
 	if err != nil {
 		return "", err
 	}
@@ -548,7 +551,7 @@ func (a *App) mcpKafkaGroup(in mcpKafkaGroupArgs) (string, error) {
 }
 
 func (a *App) mcpKafkaProduce(in mcpKafkaProduceArgs) (string, error) {
-	kc, lvl, err := a.mcpKafkaCluster(in.SessionID)
+	kc, lvl, err := a.mcpKafkaCluster(in.sid())
 	if err != nil {
 		return "", err
 	}

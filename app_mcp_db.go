@@ -41,25 +41,25 @@ const (
 )
 
 type mcpDbSessionArgs struct {
-	SessionID string `json:"session_id" jsonschema:"the id of a shared Database session (kind=db in list_sessions)"`
+	mcpSession
 }
 
 type mcpDbTablesArgs struct {
-	SessionID     string `json:"session_id" jsonschema:"the id of a shared Database session"`
+	mcpSession
 	Database      string `json:"database,omitempty" jsonschema:"the database whose tables to list (default: the one the connection opens)"`
 	Filter        string `json:"filter,omitempty" jsonschema:"case-insensitive substring of the table name"`
 	IncludeSystem bool   `json:"include_system,omitempty" jsonschema:"also list system databases and schemas"`
 }
 
 type mcpDbTableArgs struct {
-	SessionID string `json:"session_id" jsonschema:"the id of a shared Database session"`
+	mcpSession
 	Database  string `json:"database,omitempty" jsonschema:"the database (default: the one the connection opens)"`
 	Schema    string `json:"schema,omitempty" jsonschema:"the schema (PostgreSQL, default public; SQL Server, default dbo). Empty on MySQL, ClickHouse, Oracle and Db2 (their schemas are the databases), OpenSearch and Redis"`
 	Table     string `json:"table" jsonschema:"the table or view name"`
 }
 
 type mcpDbQueryArgs struct {
-	SessionID string `json:"session_id" jsonschema:"the id of a shared Database session"`
+	mcpSession
 	SQL       string `json:"sql" jsonschema:"one or more read statements (SELECT, WITH, SHOW, EXPLAIN, VALUES, TABLE, DESCRIBE), separated by semicolons. On OpenSearch / Elasticsearch: SQL, or Kibana console requests (a 'GET /index/_search' line, the JSON body on the lines after it; POST only to search endpoints). On Redis: one read command per line, redis-cli quoting (GET, HGETALL, SCAN, INFO, ...)"`
 	Database  string `json:"database,omitempty" jsonschema:"the database to run on (default: the one the connection opens)"`
 	MaxRows   int    `json:"max_rows,omitempty" jsonschema:"rows per statement (default 50, max 1000)"`
@@ -67,7 +67,7 @@ type mcpDbQueryArgs struct {
 }
 
 type mcpDbExecuteArgs struct {
-	SessionID string `json:"session_id" jsonschema:"the id of a shared Database session (read-run)"`
+	mcpSession
 	SQL       string `json:"sql" jsonschema:"the statements to run, separated by semicolons; each commits on its own. On OpenSearch / Elasticsearch: Kibana console requests ('PUT /index' and its JSON body on the lines after it). On Redis: one command per line"`
 	Database  string `json:"database,omitempty" jsonschema:"the database to run on (default: the one the connection opens)"`
 }
@@ -82,7 +82,7 @@ func (a *App) registerDbTools(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "open_db",
 		Description: "Open the Database tab of a connection marked (db) in list_connections and " +
-			"share it with you. The user is asked to approve. Returns the session_id for the db_* tools.",
+			"share it with you. The user is asked to approve. Returns the session id the db_* tools take as session.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in mcpOpenDbArgs) (*mcp.CallToolResult, any, error) {
 		return mcpText(a.mcpOpenDb(in.ConnectionID, in.DatabaseID, in.Level))
 	})
@@ -128,6 +128,9 @@ func (a *App) registerDbTools(server *mcp.Server) {
 
 // mcpDbHandle returns the open handle behind a shared Database session.
 func (a *App) mcpDbHandle(sessionID string) (*dbHandle, mcpGrantLevel, error) {
+	if err := mcpNeedSession(sessionID); err != nil {
+		return nil, mcpGrantNone, err
+	}
 	lvl := a.grantLevel(sessionID)
 	if lvl == mcpGrantNone {
 		return nil, lvl, fmt.Errorf("session not shared with the LLM")
@@ -205,7 +208,7 @@ func (dh *dbHandle) defaultDatabase(database string) string {
 }
 
 func (a *App) mcpDbTables(in mcpDbTablesArgs) (string, error) {
-	dh, _, err := a.mcpDbHandle(in.SessionID)
+	dh, _, err := a.mcpDbHandle(in.sid())
 	if err != nil {
 		return "", err
 	}
@@ -267,7 +270,7 @@ func (a *App) mcpDbTables(in mcpDbTablesArgs) (string, error) {
 }
 
 func (a *App) mcpDbDescribe(in mcpDbTableArgs) (string, error) {
-	dh, _, err := a.mcpDbHandle(in.SessionID)
+	dh, _, err := a.mcpDbHandle(in.sid())
 	if err != nil {
 		return "", err
 	}
@@ -327,7 +330,7 @@ func (a *App) mcpDbDescribe(in mcpDbTableArgs) (string, error) {
 }
 
 func (a *App) mcpDbQuery(ctx context.Context, in mcpDbQueryArgs) (string, error) {
-	dh, _, err := a.mcpDbHandle(in.SessionID)
+	dh, _, err := a.mcpDbHandle(in.sid())
 	if err != nil {
 		return "", err
 	}
@@ -349,7 +352,7 @@ func (a *App) mcpDbQuery(ctx context.Context, in mcpDbQueryArgs) (string, error)
 }
 
 func (a *App) mcpDbExecute(ctx context.Context, in mcpDbExecuteArgs) (string, error) {
-	dh, lvl, err := a.mcpDbHandle(in.SessionID)
+	dh, lvl, err := a.mcpDbHandle(in.sid())
 	if err != nil {
 		return "", err
 	}

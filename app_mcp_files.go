@@ -125,6 +125,9 @@ func mcpDownloadDest(sessionID, remotePath string) (string, error) {
 // impossible to diagnose. A refusal in the panel means the app said no; an
 // empty panel means the model never asked.
 func (a *App) mcpFileSession(sessionID, action string) (*sshlayer.Session, error) {
+	if err := mcpNeedSession(sessionID); err != nil {
+		return nil, err
+	}
 	lvl := a.grantLevel(sessionID)
 	if !canRun(lvl) {
 		reason := "shared read-only"
