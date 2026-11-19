@@ -14,6 +14,7 @@ import (
 	"ssh-tool/internal/catalog"
 	"ssh-tool/internal/creds"
 	"ssh-tool/internal/exporter"
+	"ssh-tool/internal/resolver"
 	"ssh-tool/internal/store"
 )
 
@@ -364,5 +365,44 @@ func TestCatalogFolderEditGoesToTheLayer(t *testing.T) {
 	rec, _ := ca.a.CatalogRecord("folders", ca.folderID)
 	if string(rec.Layer) != `{"username":"me"}` {
 		t.Fatalf("folder layer: %s", rec.Layer)
+	}
+}
+
+// "No colour for me" on a catalog connection whose record has a colour:
+// the editor sends "", My settings keeps it, and the row resolves to no
+// colour; clearing again (reset) brings the catalog's back.
+func TestCatalogConnectionOwnNoColour(t *testing.T) {
+	ca := newCatalogApp(t)
+	a, db := ca.a, ca.a.db
+	for _, q := range []string{`INSERT INTO catalog_writer (id) VALUES (1)`,
+		`UPDATE connections SET catalog_json = json_set(catalog_json, '$.settings.color_tag', 'red') WHERE id = '` + ca.connID + `'`,
+		`DELETE FROM catalog_writer`} {
+		if _, err := db.Conn().Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := catalog.Materialise(db, ca.cat.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := db.GetConnection(ca.connID)
+	if c.Overrides.ColorTag == nil || *c.Overrides.ColorTag != "red" {
+		t.Fatalf("catalog colour not materialised: %v", c.Overrides.ColorTag)
+	}
+	edited := c.Overrides
+	none := ""
+	edited.ColorTag = &none
+	if _, err := a.updateConnection(store.UpdateConnection{ID: ca.connID, Overrides: &edited}); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = db.GetConnection(ca.connID)
+	if c.Overrides.ColorTag == nil || *c.Overrides.ColorTag != "" {
+		t.Fatalf("own no-colour lost: %v", c.Overrides.ColorTag)
+	}
+	rs, err := resolver.ResolveConnection(db, ca.connID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rs.ColorTag != nil && *rs.ColorTag != "" {
+		t.Fatalf("resolved colour: %q", *rs.ColorTag)
 	}
 }

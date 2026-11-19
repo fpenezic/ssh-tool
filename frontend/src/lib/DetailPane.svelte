@@ -850,7 +850,7 @@
     settings.auth_ref = editingFolder.authRef || undefined;
     settings.otp_ref = editingFolder.otpRef || undefined;
     settings.jump_host = editingFolder.jumpHost;
-    settings.color_tag = editingFolder.colorTag || undefined;
+    settings.color_tag = editingFolder.colorTag || (isCatalogFolder ? "" : undefined);
     settings.auto_reconnect = decodeBool(editingFolder.autoReconnect);
     settings.sensitive = decodeBool(editingFolder.sensitive);
     settings.verbose = decodeBool(editingFolder.verbose);
@@ -1584,7 +1584,9 @@
     overrides.auth_ref = decodeAuthRef(editing.authRef);
     overrides.otp_ref = decodeAuthRef(editing.otpRef);
     overrides.jump_host = editing.jumpHost;
-    overrides.color_tag = editing.colorTag || undefined;
+    // On a catalog row an empty colour is "none for me": undefined would
+    // drop the key from My settings and bring the catalog's colour back.
+    overrides.color_tag = editing.colorTag || (isCatalogConn ? "" : undefined);
     overrides.auto_reconnect = decodeBool(editing.autoReconnect);
     overrides.sensitive = decodeBool(editing.sensitive);
     overrides.verbose = decodeBool(editing.verbose);

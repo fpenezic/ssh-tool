@@ -362,6 +362,14 @@ func LayerFromEdit(base, edited store.InheritableSettings) store.InheritableSett
 		e, b := ev.Field(i), bv.Field(i)
 		switch e.Kind() {
 		case reflect.Ptr:
+			// An empty string where the base has nothing (or nothing
+			// either) is no change: the editor sends "" to clear a value
+			// the catalog sets (a colour of the user's own: none).
+			if es, ok := e.Interface().(*string); ok && es != nil && *es == "" {
+				if bs, _ := b.Interface().(*string); bs == nil || *bs == "" {
+					continue
+				}
+			}
 			if !e.IsNil() && !reflect.DeepEqual(e.Interface(), b.Interface()) {
 				lv.Field(i).Set(e)
 			}

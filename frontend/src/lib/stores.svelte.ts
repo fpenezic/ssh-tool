@@ -366,7 +366,10 @@ class TreeStore {
   resolveColorForConnection(id: string): string {
     const c = this.connectionById(id);
     if (!c) return "";
-    if (c.overrides?.color_tag) return resolveColorTag(c.overrides.color_tag);
+    // "" is set too: "no colour" of the user's own on a catalog row
+    // (local rows never store it), so the folders' colour does not show.
+    const own = c.overrides?.color_tag;
+    if (own != null) return own ? resolveColorTag(own) : "";
     return this.resolveColorForFolder(c.folder_id ?? null);
   }
 
@@ -374,7 +377,11 @@ class TreeStore {
     let cur = this.folderById(id);
     let guard = 0;
     while (cur && guard++ < 10000) {
-      if (cur.settings?.color_tag) return resolveColorTag(cur.settings.color_tag);
+      const tag = cur.settings?.color_tag;
+      if (tag != null) {
+        if (tag) return resolveColorTag(tag);
+        if (cur.catalog_id) return "";
+      }
       cur = this.folderById(cur.parent_id ?? null);
     }
     return "";
