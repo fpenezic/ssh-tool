@@ -169,7 +169,9 @@
         >
           {emptyLabel}
         </button>
-        {#each filtered as o, i (o.value)}
+        <!-- Keyed by group + value: one value may appear under two groups (a
+             Bitwarden item in two collections), and a duplicate key throws. -->
+        {#each filtered as o, i ((o.group ?? "") + "\u0000" + o.value + "\u0000" + i)}
           <button
             type="button"
             class="row"
