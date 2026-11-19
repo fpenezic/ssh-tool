@@ -70,6 +70,9 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 ### Session sharing
 - **Join code per connection**: the guest page shows a fresh code for each connection, and the approval prompt shows the code of that request, so you allow only the request your guest reads to you. The four words compared before were the certificate fingerprint, the same for everyone holding the link, so they could not tell your guest apart from someone else. The share dialog now gives the certificate SHA-256 to send your guest, who checks it in the browser's certificate details; the words on the guest page cannot detect an intercepted connection by themselves, and the user guide no longer says they do.
 
+### Bitwarden / Vaultwarden
+- **The item list no longer comes up empty when an item sits in two collections**. Such an item is listed under both collections, and the duplicate broke the item dropdown in "New credential" and the search results of the picker on a connection.
+
 ## [1.2.1] - No edge resize on a maximised window
 
 A bugfix release for the compact title bar: a maximised or fullscreen window no longer offers to resize at its edges.

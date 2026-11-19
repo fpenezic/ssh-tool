@@ -195,7 +195,7 @@
               {#if searchHits.length === 0}
                 <p class="hint">No matches.</p>
               {:else}
-                {#each searchHits as it (it.cipher.id)}
+                {#each searchHits as it, i (it.path + "\u0000" + it.cipher.id + "\u0000" + i)}
                   <button
                     class="entry {selCipher?.id === it.cipher.id ? 'sel' : ''}"
                     onclick={() => selectCipher(it.cipher)}
