@@ -48,9 +48,9 @@ type tokenResp struct {
 
 // syncResp is the decoded /api/sync payload. Bitwarden capitalizes JSON keys.
 type syncResp struct {
-	Profile     profile       `json:"Profile"`
-	Ciphers     []cipherItem  `json:"Ciphers"`
-	Collections []collection  `json:"Collections"`
+	Profile     profile      `json:"Profile"`
+	Ciphers     []cipherItem `json:"Ciphers"`
+	Collections []collection `json:"Collections"`
 }
 
 type profile struct {
@@ -59,7 +59,7 @@ type profile struct {
 	PrivateKey     string         `json:"PrivateKey"` // RSA private key, enc by userKey
 	Kdf            int            `json:"Kdf"`
 	KdfIterations  int            `json:"KdfIterations"`
-	KdfMemory      int            `json:"KdfMemory"`      // MiB
+	KdfMemory      int            `json:"KdfMemory"` // MiB
 	KdfParallelism int            `json:"KdfParallelism"`
 	Organizations  []organization `json:"Organizations"`
 }
@@ -77,15 +77,17 @@ type collection struct {
 }
 
 type cipherItem struct {
-	ID              string          `json:"Id"`
-	OrganizationID  string          `json:"OrganizationId"`
-	Type            int             `json:"Type"`
-	Name            string          `json:"Name"`
-	Login           *loginData      `json:"Login"`
-	SSHKey          *sshKeyData     `json:"SshKey"`
-	Fields          []fieldData     `json:"Fields"`
-	Attachments     []attachmentRef `json:"Attachments"`
-	CollectionIDs   []string        `json:"CollectionIds"`
+	ID             string          `json:"Id"`
+	OrganizationID string          `json:"OrganizationId"`
+	Type           int             `json:"Type"`
+	Name           string          `json:"Name"`
+	Login          *loginData      `json:"Login"`
+	SSHKey         *sshKeyData     `json:"SshKey"`
+	Fields         []fieldData     `json:"Fields"`
+	Attachments    []attachmentRef `json:"Attachments"`
+	CollectionIDs  []string        `json:"CollectionIds"`
+	Key            string          `json:"Key"`         // item key wrapped by the org / user key (newer clients); empty = none
+	DeletedDate    any             `json:"DeletedDate"` // non-null for an item in the trash
 }
 
 type loginData struct {
