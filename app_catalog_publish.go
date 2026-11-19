@@ -133,12 +133,17 @@ func catalogRevision(ctx context.Context, c *catalog.Client) (int, error) {
 
 // catalogIsAdmin: the signed-in user is a catalog admin, asked only where
 // it matters (catalog-level slots, revision 12); false when unknown.
-func catalogIsAdmin(ctx context.Context, c *catalog.Client, rev int) bool {
+func catalogIsAdmin(ctx context.Context, c *catalog.Client, rev int) (bool, error) {
 	if rev < catalog.CatalogSlotsRevision {
-		return false
+		return false, nil
 	}
 	w, err := c.WhoAmI(ctx)
-	return err == nil && w.Admin
+	if err != nil {
+		// Not "not an admin": the plan would quietly put slots elsewhere
+		// than the dialog says.
+		return false, fmt.Errorf("catalog: check whether you are an admin: %v", err)
+	}
+	return w.Admin, nil
 }
 
 // catalogSingleConnSupported: a single-connection publish needs a server
@@ -278,8 +283,9 @@ func (a *App) CatalogPublishPreview(in CatalogPublishInput) (*catalog.PublishPla
 			rev, err := catalogRevision(ctx, c)
 			if err == nil {
 				opts.Revision = rev
-				opts.Admin = catalogIsAdmin(ctx, c, rev)
-				err = catalogSingleConnSupported(ctx, c, in)
+				if opts.Admin, err = catalogIsAdmin(ctx, c, rev); err == nil {
+					err = catalogSingleConnSupported(ctx, c, in)
+				}
 			}
 			cancel()
 			if err != nil {
@@ -316,8 +322,9 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	rev, serr := catalogRevision(mctx, c)
 	if serr == nil {
 		opts.Revision = rev
-		opts.Admin = catalogIsAdmin(mctx, c, rev)
-		serr = catalogSingleConnSupported(mctx, c, in)
+		if opts.Admin, serr = catalogIsAdmin(mctx, c, rev); serr == nil {
+			serr = catalogSingleConnSupported(mctx, c, in)
+		}
 	}
 	mcancel()
 	if serr != nil {
