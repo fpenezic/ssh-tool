@@ -356,10 +356,17 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 			return &CatalogPublishResult{Message: "not published: moving the slot \"" + ps.Name + "\" to the whole catalog failed (" + strings.TrimRight(catalogShortError(err), ". ") + "). Nothing was created."}, nil
 		}
 		moved[ps.UUID] = true
-		ext, _ := catalog.PrepareExternal(a.db, cat, a.catalogBitwardenProbe)
-		if aerr := catalog.ApplyRecords(a.db, cat, []catalog.Item{catalog.UpsertItem(catalog.KindSlots, w.Record)}, ext); aerr != nil {
-			log.Printf("catalog %s: apply moved slot: %v", cat.Name, aerr)
+		// Only the slot row: its folder and revision change no reference,
+		// so nothing is rematerialised (and no external pick is touched).
+		if serr := catalog.StoreSlotRecord(a.db, cat.ID, w.Record); serr != nil {
+			log.Printf("catalog %s: record moved slot: %v", cat.Name, serr)
 		}
+	}
+	// What stays done when the publish below fails.
+	unchanged, movedNote := " Nothing was created and nothing changed here.", ""
+	if len(moved) > 0 {
+		movedNote = fmt.Sprintf(" %d slot(s) moved to the whole catalog before the publish stay there.", len(moved))
+		unchanged = " Nothing was created." + movedNote
 	}
 	if err := a.db.RecordPublishPending(cat.ID, plan.Pending()); err != nil {
 		cancel()
@@ -371,7 +378,7 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 		log.Printf("catalog %s: publish: %v", cat.Name, err)
 		if !catalog.PublishNotCreated(err) {
 			return &CatalogPublishResult{Unknown: true,
-				Message: "no answer from the catalog (" + catalogShortError(err) + "); it stays as it is here until the next sync shows whether the publish arrived"}, nil
+				Message: "no answer from the catalog (" + catalogShortError(err) + "); it stays as it is here until the next sync shows whether the publish arrived." + movedNote}, nil
 		}
 		if derr := a.db.DropPublishPending(cat.ID, plan.UUIDs()); derr != nil {
 			log.Printf("catalog %s: publish: drop pending: %v", cat.Name, derr)
@@ -381,9 +388,9 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 			a.setCatalogState(cat.ID, catStateSignedOU, catSignedOutMsg)
 		}
 		problems := mapPublishReports(plan, catalog.PublishRecordErrors(err))
-		msg := "The catalog refused the publish (" + strings.TrimRight(catalogShortError(err), ". ") + "). Nothing was created and nothing changed here."
+		msg := "The catalog refused the publish (" + strings.TrimRight(catalogShortError(err), ". ") + ")." + unchanged
 		if len(problems) > 0 {
-			msg = fmt.Sprintf("The catalog refused %d record(s), marked below. Nothing was created and nothing changed here.", len(problems))
+			msg = fmt.Sprintf("The catalog refused %d record(s), marked below.", len(problems)) + unchanged
 		}
 		return &CatalogPublishResult{Message: msg, Problems: problems}, nil
 	}
