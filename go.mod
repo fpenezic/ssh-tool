@@ -16,8 +16,8 @@ require (
 	github.com/kayrus/putty v1.0.5
 	github.com/microsoft/go-mssqldb v1.11.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/openpubkey/openpubkey v0.30.0
-	github.com/openpubkey/opkssh v0.19.2
+	github.com/openpubkey/openpubkey v0.30.1
+	github.com/openpubkey/opkssh v0.20.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pkg/sftp v1.13.11
 	github.com/sijms/go-ora/v2 v2.9.0
