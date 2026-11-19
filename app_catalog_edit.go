@@ -436,6 +436,10 @@ type CatalogSlotInput struct {
 }
 
 func (a *App) slotFolderWritable(catalogID, folderUUID string) (bool, string) {
+	if folderUUID == "" {
+		// A catalog-level slot: admins only (revision 12).
+		return a.catalogAdmin(catalogID), ""
+	}
 	lid, err := a.db.CatalogLocalID(catalogID, catalog.KindFolders, folderUUID)
 	if err != nil || lid == "" {
 		return false, ""
@@ -683,4 +687,22 @@ func (a *App) CatalogDuplicate(id, name, hostname string) (*CatalogDuplicateResu
 type CatalogDuplicateResult struct {
 	ID      string `json:"id"`
 	Warning string `json:"warning,omitempty"`
+}
+
+// catalogAdminKey: whether the signed-in user was a catalog admin at the
+// last sign-in or publish dialog (whoami). The server decides; this only
+// chooses what the app offers (editing catalog-level slots).
+func catalogAdminKey(catalogID string) string { return "catalog_admin:" + catalogID }
+
+func (a *App) catalogAdmin(catalogID string) bool {
+	v, ok, _ := a.db.GetSetting(catalogAdminKey(catalogID))
+	return ok && v == "1"
+}
+
+func (a *App) setCatalogAdmin(catalogID string, admin bool) {
+	v := "0"
+	if admin {
+		v = "1"
+	}
+	_ = a.db.SetSetting(catalogAdminKey(catalogID), v)
 }

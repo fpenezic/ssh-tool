@@ -2266,6 +2266,24 @@ export class CatalogPublishInput {
              */
             this["review_hash"] = "";
         }
+        if (!("slots_at_catalog" in $$source)) {
+            /**
+             * Catalog-level slots (admin, protocol revision 12): SlotsAtCatalog
+             * makes new slots for the whole catalog instead of the published
+             * root; NoSlotMove names slot keys (cred:<id> ...) of another space
+             * not to move to the catalog level and reuse.
+             * @member
+             * @type {boolean}
+             */
+            this["slots_at_catalog"] = false;
+        }
+        if (!("no_slot_move" in $$source)) {
+            /**
+             * @member
+             * @type {string[]}
+             */
+            this["no_slot_move"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -2280,6 +2298,7 @@ export class CatalogPublishInput {
         const $$createField5_0 = $$createType4;
         const $$createField7_0 = $$createType4;
         const $$createField8_0 = $$createType4;
+        const $$createField11_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("slot_names" in $$parsedSource) {
             $$parsedSource["slot_names"] = $$createField4_0($$parsedSource["slot_names"]);
@@ -2292,6 +2311,9 @@ export class CatalogPublishInput {
         }
         if ("jump_skip" in $$parsedSource) {
             $$parsedSource["jump_skip"] = $$createField8_0($$parsedSource["jump_skip"]);
+        }
+        if ("no_slot_move" in $$parsedSource) {
+            $$parsedSource["no_slot_move"] = $$createField11_0($$parsedSource["no_slot_move"]);
         }
         return new CatalogPublishInput(/** @type {Partial<CatalogPublishInput>} */($$parsedSource));
     }

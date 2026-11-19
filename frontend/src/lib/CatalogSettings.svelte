@@ -72,8 +72,10 @@
       const k = s.folder_name || "";
       m.set(k, [...(m.get(k) ?? []), s]);
     }
+    // Catalog-level slots (no folder) first: every space uses them.
+    const level = (slots: CatalogSlotInfo[]) => slots.some((x) => !x.folder_uuid && !!x.folder_name);
     return [...m.entries()]
-      .sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)))
+      .sort(([a, sa], [b, sb]) => (level(sa) ? -1 : level(sb) ? 1 : a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)))
       .map(([folder, slots]) => ({ folder, slots }));
   }
   function boundShown(c: CatalogInfo): CatalogSlotInfo[] {

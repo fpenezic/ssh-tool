@@ -59,6 +59,12 @@ type CatalogPublishInput struct {
 	// ReviewHash: the review_hash of the plan the user reviewed; a publish
 	// whose rebuilt plan differs is refused.
 	ReviewHash string `json:"review_hash"`
+	// Catalog-level slots (admin, protocol revision 12): SlotsAtCatalog
+	// makes new slots for the whole catalog instead of the published
+	// root; NoSlotMove names slot keys (cred:<id> ...) of another space
+	// not to move to the catalog level and reuse.
+	SlotsAtCatalog bool     `json:"slots_at_catalog"`
+	NoSlotMove     []string `json:"no_slot_move"`
 }
 
 // CatalogPublishProblem is one per-record error of a refused publish,
@@ -123,6 +129,16 @@ func catalogRevision(ctx context.Context, c *catalog.Client) (int, error) {
 		return 0, fmt.Errorf("catalog: read the server's protocol revision: %v", err)
 	}
 	return r, nil
+}
+
+// catalogIsAdmin: the signed-in user is a catalog admin, asked only where
+// it matters (catalog-level slots, revision 12); false when unknown.
+func catalogIsAdmin(ctx context.Context, c *catalog.Client, rev int) bool {
+	if rev < catalog.CatalogSlotsRevision {
+		return false
+	}
+	w, err := c.WhoAmI(ctx)
+	return err == nil && w.Admin
 }
 
 // catalogSingleConnSupported: a single-connection publish needs a server
@@ -196,6 +212,7 @@ func (a *App) CatalogPublishTargets(catalogID string) (*CatalogPublishTargets, e
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			if w, err := c.WhoAmI(ctx); err == nil {
 				out.CanCreateSpace = w.Admin
+				a.setCatalogAdmin(catalogID, w.Admin)
 			}
 			cancel()
 		}
@@ -216,9 +233,14 @@ func (in CatalogPublishInput) options(account string) catalog.PublishOptions {
 	for _, id := range in.SkipCreds {
 		skipCreds[id] = true
 	}
+	noMove := map[string]bool{}
+	for _, k := range in.NoSlotMove {
+		noMove[k] = true
+	}
 	return catalog.PublishOptions{CatalogID: in.CatalogID, RootID: in.FolderID, ConnID: in.ConnID, TargetUUID: in.TargetUUID,
 		SlotNames: in.SlotNames, AccountName: account, Unsent: unsent, JumpSkip: skip,
-		NoSharedCreds: in.NoSharedCreds, SkipCreds: skipCreds}
+		NoSharedCreds: in.NoSharedCreds, SkipCreds: skipCreds,
+		SlotsAtCatalog: in.SlotsAtCatalog, NoSlotMove: noMove}
 }
 
 // publishResolveDyn is a publish's view of an inventory host used as a
@@ -256,6 +278,7 @@ func (a *App) CatalogPublishPreview(in CatalogPublishInput) (*catalog.PublishPla
 			rev, err := catalogRevision(ctx, c)
 			if err == nil {
 				opts.Revision = rev
+				opts.Admin = catalogIsAdmin(ctx, c, rev)
 				err = catalogSingleConnSupported(ctx, c, in)
 			}
 			cancel()
@@ -293,6 +316,7 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	rev, serr := catalogRevision(mctx, c)
 	if serr == nil {
 		opts.Revision = rev
+		opts.Admin = catalogIsAdmin(mctx, c, rev)
 		serr = catalogSingleConnSupported(mctx, c, in)
 	}
 	mcancel()
@@ -314,6 +338,17 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	if err := a.uploadPublishImages(ctx, cat.ID, c, plan); err != nil {
 		cancel()
 		return &CatalogPublishResult{Message: "not published: " + catalogShortError(err) + ". Nothing was created and nothing changed here."}, nil
+	}
+	// Slots of another space this subtree reuses move to the catalog
+	// level first; the publish below then refers to them in scope.
+	for _, ps := range plan.Slots {
+		if !ps.MoveToCatalog {
+			continue
+		}
+		if _, err := c.Patch(ctx, catalog.KindSlots, ps.UUID, ps.Rev, map[string]any{"folder_uuid": nil}); err != nil {
+			cancel()
+			return &CatalogPublishResult{Message: "not published: moving the slot \"" + ps.Name + "\" to the whole catalog failed (" + strings.TrimRight(catalogShortError(err), ". ") + "). Nothing was created."}, nil
+		}
 	}
 	if err := a.db.RecordPublishPending(cat.ID, plan.Pending()); err != nil {
 		cancel()

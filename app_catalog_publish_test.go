@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -26,6 +27,10 @@ type publishApp struct {
 	mode        string // ok | refuse | drop | unauth
 	posts       int
 	lastRequest catalog.PublishRequest
+	revision    int      // meta's protocol revision (default 1)
+	admin       bool     // whoami admin
+	patches     []string // "<path> <body>" of PATCH requests, in order
+	order       []string // "patch" / "publish", in the order they arrived
 }
 
 func newPublishApp(t *testing.T) *publishApp {
@@ -45,13 +50,25 @@ func newPublishApp(t *testing.T) *publishApp {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/meta":
-			fmt.Fprintf(w, `{"server":{"name":"Fake"},"protocol":{"major":1,"revision":1},"auth":{"authorization_endpoint":"http://%[1]s/a","token_endpoint":"http://%[1]s/oauth/token","client_id":"ssh-tool"}}`, r.Host)
+			pa.mu.Lock()
+			rev := pa.revision
+			pa.mu.Unlock()
+			if rev == 0 {
+				rev = 1
+			}
+			fmt.Fprintf(w, `{"server":{"name":"Fake"},"protocol":{"major":1,"revision":%[2]d},"auth":{"authorization_endpoint":"http://%[1]s/a","token_endpoint":"http://%[1]s/oauth/token","client_id":"ssh-tool"}}`, r.Host, rev)
+		case "/api/v1/whoami":
+			pa.mu.Lock()
+			adm := pa.admin
+			pa.mu.Unlock()
+			fmt.Fprintf(w, `{"subject":"s","name":"Bob","groups":[],"admin":%v,"via":"local"}`, adm)
 		case "/oauth/token":
 			fmt.Fprint(w, `{"access_token":"at","token_type":"Bearer","expires_in":3600,"refresh_token":"rt"}`)
 		case "/api/v1/changes":
 			fmt.Fprint(w, `{"reset":false,"cursor":"c","items":[]}`)
 		case "/api/v1/publish":
 			pa.mu.Lock()
+			pa.order = append(pa.order, "publish")
 			pa.posts++
 			mode := pa.mode
 			var req catalog.PublishRequest
@@ -84,6 +101,17 @@ func newPublishApp(t *testing.T) *publishApp {
 				_ = json.NewEncoder(w).Encode(map[string]any{"records": recs, "warnings": []any{}})
 			}
 		default:
+			if r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/v1/slots/") {
+				var body map[string]any
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				b, _ := json.Marshal(body)
+				pa.mu.Lock()
+				pa.patches = append(pa.patches, r.URL.Path+" "+string(b))
+				pa.order = append(pa.order, "patch")
+				pa.mu.Unlock()
+				_ = json.NewEncoder(w).Encode(map[string]any{"uuid": strings.TrimPrefix(r.URL.Path, "/api/v1/slots/"), "rev": 2, "folder_uuid": nil, "type": "cred", "name": "opk", "kind": "slot", "backend": nil, "external_ref": nil, "doc_md": ""})
+				return
+			}
 			w.WriteHeader(404)
 		}
 	}))
@@ -326,5 +354,55 @@ func TestPublishResolveDynJumpRef(t *testing.T) {
 	}
 	if _, ok := a.publishResolveDyn(resolver.DynRef(folder.ID, "vm/999")); ok {
 		t.Fatal("a host gone from the inventory resolved")
+	}
+}
+
+// Catalog-level slots at the app level: an admin publishing a new space on
+// a revision-12 server reuses the opkssh slot of another space by moving
+// it to the catalog level first (PATCH folder_uuid null, before the
+// publish), and sends no second slot.
+func TestCatalogPublishMovesSlotToCatalogLevel(t *testing.T) {
+	pa := newPublishApp(t)
+	db := pa.a.db
+	pa.mu.Lock()
+	pa.revision, pa.admin = catalog.CatalogSlotsRevision, true
+	pa.mu.Unlock()
+	opk, err := db.CreateCredential(store.NewCredential{Name: "my opkssh", Kind: store.CredOpkssh})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Conn().Exec(`UPDATE connections SET overrides_json = json_set(overrides_json, '$.auth_ref', ?) WHERE id = ?`, opk.ID, pa.conn); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.WithTx(func(tx *sql.Tx) error {
+		return db.UpsertCatalogSlotTx(tx, store.CatalogSlot{CatalogID: pa.cat.ID, UUID: "slot-opk", Rev: 1, FolderUUID: "space-a", Type: "cred", Name: "Bulb opkssh sso", Kind: "slot"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetCatalogBinding(pa.cat.ID, "slot-opk", "cred", opk.ID); err != nil {
+		t.Fatal(err)
+	}
+	in := pa.in()
+	p, err := pa.a.CatalogPublishPreview(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Slots) != 1 || !p.Slots[0].MoveToCatalog || p.Slots[0].UUID != "slot-opk" {
+		t.Fatalf("preview slots: %+v", p.Slots)
+	}
+	res, err := pa.a.CatalogPublish(in)
+	if err != nil || !res.Published {
+		t.Fatalf("publish: %+v %v", res, err)
+	}
+	pa.mu.Lock()
+	defer pa.mu.Unlock()
+	if len(pa.patches) != 1 || pa.patches[0] != `/api/v1/slots/slot-opk {"folder_uuid":null}` {
+		t.Fatalf("patches: %v", pa.patches)
+	}
+	if strings.Join(pa.order, ",") != "patch,publish" {
+		t.Fatalf("order: %v", pa.order)
+	}
+	if len(pa.lastRequest.Slots) != 0 {
+		t.Fatalf("a new slot was sent: %+v", pa.lastRequest.Slots)
 	}
 }
