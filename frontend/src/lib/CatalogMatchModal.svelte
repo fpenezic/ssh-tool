@@ -366,6 +366,9 @@
   .err { color: var(--red); font-size: var(--fs-sm); margin: 0; display: flex; gap: 5px; }
   footer { display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; border-top: 1px solid var(--surface0); padding-top: 0.5rem; }
   footer .left, .undo-q { margin-right: auto; }
+  footer button { background: var(--surface0); color: var(--text); border: 0; border-radius: var(--r-sm); height: var(--ctl-h); padding: 0 0.9rem; font: inherit; cursor: pointer; }
+  footer button:not(.primary):hover:not(:disabled) { background: var(--surface1); }
+  footer button:disabled { opacity: 0.6; cursor: default; }
   button.primary { background: var(--blue); color: var(--base); border: 0; }
   button.danger { color: var(--red); }
 </style>
