@@ -341,13 +341,24 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	}
 	// Slots of another space this subtree reuses move to the catalog
 	// level first; the publish below then refers to them in scope.
+	// Each remote slot moves once (two local credentials can stand for
+	// the same item), and a move that went through is applied here at
+	// once, under the apply lock held above: a later failure must not
+	// leave the old folder and revision to trip the next attempt.
+	moved := map[string]bool{}
 	for _, ps := range plan.Slots {
-		if !ps.MoveToCatalog {
+		if !ps.MoveToCatalog || moved[ps.UUID] {
 			continue
 		}
-		if _, err := c.Patch(ctx, catalog.KindSlots, ps.UUID, ps.Rev, map[string]any{"folder_uuid": nil}); err != nil {
+		w, err := c.Patch(ctx, catalog.KindSlots, ps.UUID, ps.Rev, map[string]any{"folder_uuid": nil})
+		if err != nil {
 			cancel()
 			return &CatalogPublishResult{Message: "not published: moving the slot \"" + ps.Name + "\" to the whole catalog failed (" + strings.TrimRight(catalogShortError(err), ". ") + "). Nothing was created."}, nil
+		}
+		moved[ps.UUID] = true
+		ext, _ := catalog.PrepareExternal(a.db, cat, a.catalogBitwardenProbe)
+		if aerr := catalog.ApplyRecords(a.db, cat, []catalog.Item{catalog.UpsertItem(catalog.KindSlots, w.Record)}, ext); aerr != nil {
+			log.Printf("catalog %s: apply moved slot: %v", cat.Name, aerr)
 		}
 	}
 	if err := a.db.RecordPublishPending(cat.ID, plan.Pending()); err != nil {

@@ -334,8 +334,13 @@ func reviewHash(p *PublishPlan) string {
 	// gains one since the preview is a different plan.
 	var sl []string
 	for _, x := range p.Slots {
-		if x.MoveToCatalog || x.CatalogLevel {
-			sl = append(sl, fmt.Sprintf("%s\x00%v\x00%v", x.Key, x.MoveToCatalog, x.CatalogLevel))
+		switch {
+		case x.MoveToCatalog:
+			// Which existing slot moves, at which revision: another slot
+			// picked since the preview is a different plan.
+			sl = append(sl, fmt.Sprintf("%s\x00move\x00%s\x00%d", x.Key, x.UUID, x.Rev))
+		case x.CatalogLevel:
+			sl = append(sl, x.Key+"\x00new-catalog-level")
 		}
 	}
 	sort.Strings(sl)
