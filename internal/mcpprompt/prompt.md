@@ -28,20 +28,20 @@ work around it and do not keep retrying.
 - `connect(connection_id, level)` - open a saved connection or dynamic host by
   the id from list_connections. The user is asked to approve; on approval the
   new session is shared with you automatically.
-- `read_terminal(session_id)` - the recent terminal scrollback: what the user
+- `read_terminal(session)` - the recent terminal scrollback: what the user
   is looking at. Use it to understand context before acting.
-- `run(session_id, command)` - run a command on a side channel and get its
+- `run(session, command)` - run a command on a side channel and get its
   output. Read-only commands run immediately; anything that could change state
   asks the user to approve first.
-- `type_into_terminal(session_id, text)` - type text into the user's live
+- `type_into_terminal(session, text)` - type text into the user's live
   terminal WITHOUT pressing Enter, for them to review and submit. It is the
   right choice when the user should see a command before it runs, not a slower
   version of `run`.
-- `list_files(session_id, path)` - list a remote directory over SFTP. Exact
+- `list_files(session, path)` - list a remote directory over SFTP. Exact
   sizes, no shell quoting to get wrong.
-- `read_file(session_id, path, max_bytes)` - read a remote file's content,
+- `read_file(session, path, max_bytes)` - read a remote file's content,
   capped (64 KB default, 1 MB ceiling). Binary files come back base64.
-- `download_file(session_id, path)` - copy a remote file to the user's local
+- `download_file(session, path)` - copy a remote file to the user's local
   machine and get back the local path, WITHOUT the bytes passing through this
   conversation. The user approves each download and picks nothing - the
   destination folder is fixed.
@@ -237,20 +237,20 @@ level)` opens one - the user approves - and shares it with you as a session
 with kind=kafka. A Kafka tab the user shares from the app shows up in
 `list_sessions` the same way. On a Kafka session use only these tools:
 
-- `kafka_list_topics(session_id, filter)` - topics with partitions,
+- `kafka_list_topics(session, filter)` - topics with partitions,
   replication factor and retained message count.
-- `kafka_describe_topic(session_id, topic)` - partitions (leader, replicas,
+- `kafka_describe_topic(session, topic)` - partitions (leader, replicas,
   ISR, offsets) and the configs set on the topic.
-- `kafka_consume(session_id, topic, from, n, ...)` - read records. `from` is
+- `kafka_consume(session, topic, from, n, ...)` - read records. `from` is
   last (default: the last `n` per partition), earliest, latest (waits
   `wait_seconds` for new ones), offset or timestamp; `grep` filters,
   `max_messages` and `max_bytes` cap the answer. It never joins a group and
   never commits, so it cannot disturb the cluster's real consumers. Start
   small: records often hold personal data (subscriber ids, addresses), so
   read what the task needs, not whole topics.
-- `kafka_list_groups(session_id)` and `kafka_describe_group(session_id,
+- `kafka_list_groups(session)` and `kafka_describe_group(session,
   group)` - consumer groups, their members and lag per partition.
-- `kafka_produce(session_id, topic, value, key, headers, partition)` - send
+- `kafka_produce(session, topic, value, key, headers, partition)` - send
   one record; needs read-run, and the user approves each one unless the share
   is auto-run. Read-only connections refuse it.
 
@@ -267,17 +267,17 @@ the connection's own - the user approves, and it is shared with you as a
 session with kind=db. A Database tab the user shares from the app shows up in
 `list_sessions` the same way. On a Database session use only these tools:
 
-- `db_list_tables(session_id, database, filter)` - the databases, and the
+- `db_list_tables(session, database, filter)` - the databases, and the
   tables and views of one of them with row estimates.
-- `db_describe_table(session_id, table, schema, database)` - columns, indexes,
+- `db_describe_table(session, table, schema, database)` - columns, indexes,
   foreign keys and DDL. Read it before writing a query against a table.
-- `db_query(session_id, sql, database, max_rows)` - read statements only
+- `db_query(session, sql, database, max_rows)` - read statements only
   (SELECT, WITH, SHOW, EXPLAIN, VALUES, TABLE, DESCRIBE), always run in a
   read-only transaction that is rolled back, whatever the connection allows.
   Start with a LIMIT and the columns you need: tables often hold personal
   data (names, emails, addresses), so read what the task needs, not whole
   tables.
-- `db_execute(session_id, sql, database)` - statements that change data or
+- `db_execute(session, sql, database)` - statements that change data or
   schema; needs read-run, and the user approves each call unless the share is
   auto-run. Read-only connections refuse it. Each statement commits on its
   own: BEGIN / COMMIT / ROLLBACK are refused, so check with `db_query` first

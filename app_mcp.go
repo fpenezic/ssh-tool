@@ -549,6 +549,9 @@ func (a *App) mcpListSessions() []mcpSessionInfo {
 // for shared sessions. The returned string is UNTRUSTED host output - the
 // caller frames it as data, not instructions.
 func (a *App) mcpReadTerminal(sessionID string, maxBytes int) (string, error) {
+	if err := mcpNeedSession(sessionID); err != nil {
+		return "", err
+	}
 	if a.grantLevel(sessionID) == mcpGrantNone {
 		return "", fmt.Errorf("session not shared with the LLM")
 	}
@@ -586,6 +589,9 @@ func (a *App) mcpReadOnlyExtra() []string {
 // gated by the allowlist / approval. Requires a read-run grant. Returns the
 // combined output.
 func (a *App) mcpRun(sessionID, command string) (string, error) {
+	if err := mcpNeedSession(sessionID); err != nil {
+		return "", err
+	}
 	lvl := a.grantLevel(sessionID)
 	if !canRun(lvl) {
 		return "", fmt.Errorf("session not shared for running commands")
@@ -638,6 +644,9 @@ func (a *App) mcpRun(sessionID, command string) (string, error) {
 // approve) writes it WITHOUT a trailing newline so it sits at the prompt for
 // the user to review and press Enter. Requires a read-run grant.
 func (a *App) mcpType(sessionID, text string) (string, error) {
+	if err := mcpNeedSession(sessionID); err != nil {
+		return "", err
+	}
 	lvl := a.grantLevel(sessionID)
 	if !canRun(lvl) {
 		return "", fmt.Errorf("session not shared for running commands")

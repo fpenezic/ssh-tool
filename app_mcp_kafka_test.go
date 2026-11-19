@@ -60,7 +60,7 @@ func mcpKafkaApp(t *testing.T, readOnly bool) (*App, string) {
 
 func TestMcpKafkaNeedsShare(t *testing.T) {
 	a, sid := mcpKafkaApp(t, false)
-	if _, err := a.mcpKafkaTopics(mcpKafkaTopicsArgs{SessionID: sid}); err == nil {
+	if _, err := a.mcpKafkaTopics(mcpKafkaTopicsArgs{mcpSession: mcpSession{Session: sid}}); err == nil {
 		t.Fatal("unshared Kafka session readable")
 	}
 	if err := a.McpShareSession(sid, "read"); err != nil {
@@ -70,7 +70,7 @@ func TestMcpKafkaNeedsShare(t *testing.T) {
 	if len(g) != 1 || g[0].Kind != "kafka" || !strings.HasSuffix(g[0].Name, "(Kafka)") {
 		t.Fatalf("grants = %+v", g)
 	}
-	out, err := a.mcpKafkaTopics(mcpKafkaTopicsArgs{SessionID: sid})
+	out, err := a.mcpKafkaTopics(mcpKafkaTopicsArgs{mcpSession: mcpSession{Session: sid}})
 	if err != nil || !strings.Contains(out, "events  partitions=2 rf=1 messages=30") {
 		t.Fatalf("topics = %q, %v", out, err)
 	}
@@ -88,7 +88,7 @@ func TestMcpKafkaConsume(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	out, err := a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{SessionID: sid, Topic: "events", From: "earliest", MaxMessages: 5})
+	out, err := a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{mcpSession: mcpSession{Session: sid}, Topic: "events", From: "earliest", MaxMessages: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestMcpKafkaConsume(t *testing.T) {
 		t.Fatalf("earliest 5:\n%s", out)
 	}
 
-	out, err = a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{SessionID: sid, Topic: "events", From: "earliest", Grep: "NEEDLE"})
+	out, err = a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{mcpSession: mcpSession{Session: sid}, Topic: "events", From: "earliest", Grep: "NEEDLE"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,21 +105,21 @@ func TestMcpKafkaConsume(t *testing.T) {
 	}
 
 	// Default: the last 10 of every partition, capped at 20 records.
-	out, err = a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{SessionID: sid, Topic: "events"})
+	out, err = a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{mcpSession: mcpSession{Session: sid}, Topic: "events"})
 	if err != nil || !strings.Contains(out, "20 record(s) shown") {
 		t.Fatalf("default:\n%s %v", out, err)
 	}
 
 	// The byte budget wins over the count.
-	out, err = a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{SessionID: sid, Topic: "events", From: "earliest", MaxMessages: 30, MaxBytes: 300})
+	out, err = a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{mcpSession: mcpSession{Session: sid}, Topic: "events", From: "earliest", MaxMessages: 30, MaxBytes: 300})
 	if err != nil || !strings.Contains(out, "did not fit max_bytes") {
 		t.Fatalf("max_bytes:\n%s %v", out, err)
 	}
 
-	if _, err := a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{SessionID: sid, Topic: "events", From: "timestamp", Timestamp: "yesterday"}); err == nil {
+	if _, err := a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{mcpSession: mcpSession{Session: sid}, Topic: "events", From: "timestamp", Timestamp: "yesterday"}); err == nil {
 		t.Fatal("bad timestamp: want error")
 	}
-	if _, err := a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{SessionID: sid, Topic: "nope"}); err == nil {
+	if _, err := a.mcpKafkaConsume(ctx, mcpKafkaConsumeArgs{mcpSession: mcpSession{Session: sid}, Topic: "nope"}); err == nil {
 		t.Fatal("unknown topic: want error")
 	}
 }
@@ -127,7 +127,7 @@ func TestMcpKafkaConsume(t *testing.T) {
 func TestMcpKafkaProduceGrants(t *testing.T) {
 	a, sid := mcpKafkaApp(t, false)
 	v := "hello"
-	in := mcpKafkaProduceArgs{SessionID: sid, Topic: "events", Value: &v}
+	in := mcpKafkaProduceArgs{mcpSession: mcpSession{Session: sid}, Topic: "events", Value: &v}
 
 	_ = a.McpShareSession(sid, "read")
 	if _, err := a.mcpKafkaProduce(in); err == nil || !strings.Contains(err.Error(), "read-run") {
@@ -149,7 +149,7 @@ func TestMcpKafkaProduceReadOnlyConnection(t *testing.T) {
 	a, sid := mcpKafkaApp(t, true)
 	_ = a.McpShareSession(sid, "read-run-yolo")
 	v := "x"
-	if _, err := a.mcpKafkaProduce(mcpKafkaProduceArgs{SessionID: sid, Topic: "events", Value: &v}); err != errKafkaReadOnly {
+	if _, err := a.mcpKafkaProduce(mcpKafkaProduceArgs{mcpSession: mcpSession{Session: sid}, Topic: "events", Value: &v}); err != errKafkaReadOnly {
 		t.Fatalf("err = %v, want read-only", err)
 	}
 }
@@ -157,7 +157,7 @@ func TestMcpKafkaProduceReadOnlyConnection(t *testing.T) {
 func TestMcpKafkaToolsRefuseSSHSessions(t *testing.T) {
 	a, _ := mcpKafkaApp(t, false)
 	a.mcp.grants["ssh-session"] = mcpGrantReadOnly
-	if _, err := a.mcpKafkaTopics(mcpKafkaTopicsArgs{SessionID: "ssh-session"}); err == nil || !strings.Contains(err.Error(), "not a Kafka session") {
+	if _, err := a.mcpKafkaTopics(mcpKafkaTopicsArgs{mcpSession: mcpSession{Session: "ssh-session"}}); err == nil || !strings.Contains(err.Error(), "not a Kafka session") {
 		t.Fatalf("err = %v", err)
 	}
 }
