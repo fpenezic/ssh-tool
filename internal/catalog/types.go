@@ -178,6 +178,10 @@ func KnownKind(kind string) bool {
 const (
 	BookmarksRevision       = 6
 	PortPlaceholderRevision = 9
+	// CatalogSlotsRevision: from it a slot may sit at the catalog level
+	// (folder_uuid null): in scope for every record, written by admins
+	// only (PROTOCOL 3.5).
+	CatalogSlotsRevision = 12
 )
 
 // Bookmark is a shared forward bookmark: a name and an http(s) URL. The

@@ -377,6 +377,7 @@ func (a *App) catalogSignedIn(cat *store.Catalog, c *catalog.Client, via string)
 		server, rev = meta.Server.Name, int64(meta.Protocol.Revision)
 	}
 	_ = a.db.UpdateCatalogAccount(id, w.Subject, w.Name, server, rev)
+	a.setCatalogAdmin(id, w.Admin)
 	_ = a.db.SetCatalogSyncState(id, "", nil, "")
 	a.recordAudit("catalog.sign_in", id, map[string]string{"account": w.Name, "via": via})
 	a.setCatalogState(id, catStateOK, "")
@@ -805,6 +806,9 @@ type CatalogSlotInfo struct {
 	Covered bool `json:"covered,omitempty"`
 }
 
+// catalogLevelName is where a catalog-level slot lives, as the app shows it.
+const catalogLevelName = "Whole catalog"
+
 func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []CatalogSlotInfo {
 	bindings, _ := a.db.ListCatalogBindings(catalogID)
 	bound := map[string]store.CatalogBinding{}
@@ -816,9 +820,11 @@ func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []Ca
 	out := make([]CatalogSlotInfo, 0, len(slots))
 	for _, s := range slots {
 		info := CatalogSlotInfo{CatalogSlot: s, State: "unbound", Skipped: skipped[catalogID+"/"+s.UUID]}
-		if ok, lid := a.slotFolderWritable(catalogID, s.FolderUUID); lid != "" {
+		if ok, lid := a.slotFolderWritable(catalogID, s.FolderUUID); lid != "" || s.FolderUUID == "" {
 			info.CanWrite = ok && runtime.GOOS != "android" && runtime.GOOS != "ios"
-			if f, err := a.db.GetFolder(lid); err == nil {
+			if s.FolderUUID == "" {
+				info.FolderName = catalogLevelName
+			} else if f, err := a.db.GetFolder(lid); err == nil {
 				info.FolderName = f.Name
 			}
 		}

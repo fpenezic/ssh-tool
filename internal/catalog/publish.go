@@ -42,6 +42,14 @@ type PublishOptions struct {
 	TargetUUID string
 	// SlotNames: names for new slots, by PlanSlot.Key.
 	SlotNames map[string]string
+	// Admin: the publisher is a catalog admin (whoami). With Revision 12
+	// it enables catalog-level slots: SlotsAtCatalog puts new slots there
+	// instead of in the published root, and a slot of another space bound
+	// to the same thing is moved there and reused, unless its key is in
+	// NoSlotMove.
+	Admin          bool
+	SlotsAtCatalog bool
+	NoSlotMove     map[string]bool
 	// AccountName goes into the stored records as their author until the
 	// feed brings the server's own fields.
 	AccountName string
@@ -165,7 +173,8 @@ type PublishForward struct {
 }
 
 type PublishSlot struct {
-	UUID        string          `json:"uuid"`
+	UUID string `json:"uuid"`
+	// FolderUUID "" is a catalog-level slot, sent as null (revision 12).
 	FolderUUID  string          `json:"folder_uuid"`
 	Type        string          `json:"type"`
 	Name        string          `json:"name"`
@@ -173,6 +182,21 @@ type PublishSlot struct {
 	Backend     *string         `json:"backend"`
 	ExternalRef json.RawMessage `json:"external_ref"`
 	DocMD       string          `json:"doc_md"`
+}
+
+// MarshalJSON sends a catalog-level slot's folder_uuid as null.
+func (s PublishSlot) MarshalJSON() ([]byte, error) {
+	type plain PublishSlot
+	b, err := json.Marshal(plain(s))
+	if err != nil || s.FolderUUID != "" {
+		return b, err
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	m["folder_uuid"] = json.RawMessage("null")
+	return json.Marshal(m)
 }
 
 // PublishRequest is the POST /api/v1/publish body.
@@ -210,9 +234,17 @@ type PlanSlot struct {
 	// What the publisher's binding points at, and its name.
 	BindTarget string `json:"bind_target"`
 	BindName   string `json:"bind_name"`
-	// Reused: where the existing slot lives (its folder's name).
+	// Reused: where the existing slot lives (its folder's name; "the
+	// whole catalog" for a catalog-level slot).
 	ReusedFrom string `json:"reused_from,omitempty"`
 	UsedBy     int    `json:"used_by"`
+	// MoveToCatalog: an existing slot of another space, bound to the same
+	// thing here, that the publish moves to the catalog level first so
+	// this subtree can use it (admin, revision 12). Rev is its revision
+	// for that move. CatalogLevel: a new slot made at the catalog level.
+	MoveToCatalog bool  `json:"move_to_catalog,omitempty"`
+	Rev           int64 `json:"rev,omitempty"`
+	CatalogLevel  bool  `json:"catalog_level,omitempty"`
 }
 
 // FreeText is one free-form value the user reviews before sending.
@@ -252,12 +284,15 @@ type OutsideJump struct {
 
 // PublishPlan is everything the dialog shows and the publish sends.
 type PublishPlan struct {
-	Request      PublishRequest `json:"-"`
-	Records      []PlanRecord   `json:"records"`
-	Slots        []PlanSlot     `json:"slots"`
-	FreeText     []FreeText     `json:"free_text"`
-	Refusals     []Refusal      `json:"refusals"`
-	OutsideJumps []OutsideJump  `json:"outside_jumps"`
+	Request PublishRequest `json:"-"`
+	Records []PlanRecord   `json:"records"`
+	Slots   []PlanSlot     `json:"slots"`
+	// CatalogSlots: catalog-level slots are on offer (admin, revision 12):
+	// new slots can go to the whole catalog, other spaces' slots move there.
+	CatalogSlots bool          `json:"catalog_slots,omitempty"`
+	FreeText     []FreeText    `json:"free_text"`
+	Refusals     []Refusal     `json:"refusals"`
+	OutsideJumps []OutsideJump `json:"outside_jumps"`
 	// ReviewHash fingerprints what the user reviews (free text, references
 	// kept local, slots): a publish whose rebuilt plan differs from the
 	// previewed one is refused, so text changed after the review is never
@@ -295,11 +330,21 @@ func reviewHash(p *PublishPlan) string {
 	for _, x := range p.Records {
 		r = append(r, x.Kind+"\x00"+x.Path)
 	}
+	// Slot moves and catalog-level slots reach other spaces: a plan that
+	// gains one since the preview is a different plan.
+	var sl []string
+	for _, x := range p.Slots {
+		if x.MoveToCatalog || x.CatalogLevel {
+			sl = append(sl, fmt.Sprintf("%s\x00%v\x00%v", x.Key, x.MoveToCatalog, x.CatalogLevel))
+		}
+	}
+	sort.Strings(sl)
 	b, _ := json.Marshal(struct {
 		F []ft
 		K []KeptRef
 		R []string
-	}{f, p.KeptLocal, r})
+		S []string `json:",omitempty"`
+	}{f, p.KeptLocal, r, sl})
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }
@@ -446,6 +491,7 @@ type pubCtx struct {
 	slots    map[string]*PlanSlot
 	slotUse  map[string]map[string]bool // slot key -> record uuids using it
 	scope    []store.CatalogSlot        // existing slots in scope of the target
+	allSlots []store.CatalogSlot        // every slot of the catalog
 	bindings map[string]store.CatalogBinding
 	outside  map[string]*OutsideJump
 	rootUUID string
@@ -676,7 +722,19 @@ func (c *pubCtx) load() error {
 // (its own and its ancestors', skeleton ones included).
 func (c *pubCtx) target(cat *store.Catalog) error {
 	if c.opts.TargetUUID == "" {
+		// A new space: only catalog-level slots are in scope.
 		c.plan.TargetLocalID = cat.RootFolderID
+		slots, err := c.db.ListCatalogSlots(c.opts.CatalogID)
+		if err != nil {
+			return err
+		}
+		c.allSlots = slots
+		for _, s := range slots {
+			if s.FolderUUID == "" {
+				c.scope = append(c.scope, s)
+			}
+		}
+		c.reusedNames = map[string]string{"": "the whole catalog"}
 		return nil
 	}
 	type folderRec struct {
@@ -731,11 +789,14 @@ func (c *pubCtx) target(cat *store.Catalog) error {
 	if err != nil {
 		return err
 	}
+	c.allSlots = slots
 	for _, s := range slots {
-		if _, ok := chain[s.FolderUUID]; ok {
+		// A catalog-level slot ("" folder) is in scope everywhere.
+		if _, ok := chain[s.FolderUUID]; ok || s.FolderUUID == "" {
 			c.scope = append(c.scope, s)
 		}
 	}
+	chain[""] = "the whole catalog"
 	c.reusedNames = chain
 	return nil
 }
@@ -1572,6 +1633,35 @@ func (c *pubCtx) slot(key, typ, target, kind, u, name, field string) string {
 			return ps.UUID
 		}
 	}
+	// Admin on a revision-12 server: a slot of another space that already
+	// stands for the same thing moves to the catalog level and is reused,
+	// rather than a second slot everyone binds again.
+	if c.catalogSlots() && !c.opts.NoSlotMove[key] {
+		for _, s := range c.allSlots {
+			if s.Type != typ || s.FolderUUID == "" {
+				continue
+			}
+			b, bound := c.bindings[s.UUID]
+			same := bound && b.Kind == typ && b.TargetID == target
+			if !same && bw != nil && s.Kind == "external" {
+				var ref bitwardenRef
+				if json.Unmarshal([]byte(s.ExternalRefJSON), &ref) == nil && ref.CipherID == bw.CipherID && fieldOr(ref.Field) == bw.Field {
+					same = true
+				}
+			}
+			if !same {
+				continue
+			}
+			if bound {
+				ps.BindTarget = b.TargetID
+			}
+			ps.UUID, ps.Name, ps.New, ps.Rev = s.UUID, s.Name, false, s.Rev
+			ps.Kind, ps.Backend = s.Kind, s.Backend
+			ps.MoveToCatalog, ps.ReusedFrom = true, c.slotFolderName(s.FolderUUID)
+			c.slots[key] = ps
+			return ps.UUID
+		}
+	}
 	ps.UUID, ps.New = uuid.NewString(), true
 	ps.Name = ps.BindName
 	if typ == slotJump {
@@ -1585,7 +1675,11 @@ func (c *pubCtx) slot(key, typ, target, kind, u, name, field string) string {
 	if ps.Name == "" {
 		ps.Name = typ + " slot"
 	}
-	rec := PublishSlot{UUID: ps.UUID, FolderUUID: c.rootUUID, Type: typ, Name: ps.Name, ExternalRef: json.RawMessage("null")}
+	folder := c.rootUUID
+	if c.catalogSlots() && c.opts.SlotsAtCatalog {
+		folder, ps.CatalogLevel = "", true
+	}
+	rec := PublishSlot{UUID: ps.UUID, FolderUUID: folder, Type: typ, Name: ps.Name, ExternalRef: json.RawMessage("null")}
 	if typ == slotCred {
 		k := ps.Kind
 		rec.Kind = &k
@@ -1598,6 +1692,28 @@ func (c *pubCtx) slot(key, typ, target, kind, u, name, field string) string {
 	c.plan.Request.Slots = append(c.plan.Request.Slots, rec)
 	c.slots[key] = ps
 	return ps.UUID
+}
+
+// catalogSlots: catalog-level slots can be made and moved to (an admin
+// publishing to a revision-12 server).
+func (c *pubCtx) catalogSlots() bool {
+	return c.opts.Admin && c.opts.Revision >= CatalogSlotsRevision
+}
+
+// slotFolderName names where a slot lives, for the review.
+func (c *pubCtx) slotFolderName(folderUUID string) string {
+	if folderUUID == "" {
+		return "the whole catalog"
+	}
+	if n, ok := c.reusedNames[folderUUID]; ok {
+		return n
+	}
+	if id, err := c.db.CatalogLocalID(c.opts.CatalogID, KindFolders, folderUUID); err == nil && id != "" {
+		if f, err := c.db.GetFolder(id); err == nil {
+			return f.Name
+		}
+	}
+	return "another space"
 }
 
 func nonNil[T any](s []T) []T {
@@ -1621,6 +1737,7 @@ func (c *pubCtx) finish() {
 	c.plan.KeptLocal = nonNil(c.plan.KeptLocal)
 	c.plan.TargetInherits = nonNil(c.plan.TargetInherits)
 	defer func() { c.plan.ReviewHash = reviewHash(c.plan) }()
+	c.plan.CatalogSlots = c.catalogSlots()
 	c.plan.Request.Slots = nonNil(c.plan.Request.Slots)
 	c.plan.Request.Forwards = nonNil(c.plan.Request.Forwards)
 	if c.opts.TargetUUID != "" {

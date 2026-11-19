@@ -3404,6 +3404,7 @@ Sync runs in the background on an interval and on **Sync now**. The catalog's ro
 - **From the editor**: a catalog connection whose credential comes from a slot you have not bound shows a picker next to its Credential field; binding there binds the slot for every connection that uses it.
 - **Settings -> Catalogs -> Slots** lists the slots still to bind first, grouped by the folder they are defined on. The ones you have bound sit behind **Show N bound slots**, with a filter by slot, what it is bound to or folder.
 - A slot backed by a **Bitwarden / Vaultwarden** item needs no binding when you can read the same item: the app finds it.
+- **Slots for the whole catalog** (catalog servers from protocol revision 12): a slot can sit at the catalog level instead of in one space, so every space uses it and colleagues bind it once (Settings -> Catalogs lists them first, under **Whole catalog**). Only catalog admins create or change one. When an admin publishes a space that uses the same opkssh or Bitwarden item as a slot of another space, the publish moves that slot to the whole catalog and reuses it (untick **reuse** to make a new one instead); **New slots for the whole catalog** (on by default for a new space) makes the publish's new slots catalog-wide.
 - Connects you did not click (workspace restore, tunnel autostart, MCP, the CI runner) never ask; they fail with the slot's message instead.
 
 ### My settings and the catalog record

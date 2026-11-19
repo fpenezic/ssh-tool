@@ -944,3 +944,74 @@ func TestPublishWithoutUsernames(t *testing.T) {
 		t.Fatalf("resolves differently:\n before %s\n after  %s", before, got)
 	}
 }
+
+// Catalog-level slots (revision 12): a second space using the same shared
+// credential reuses the first space's slot by moving it to the catalog
+// level (admin only, and not when the user unticks the move); new slots
+// can be made at the catalog level; a slot already there is in scope for
+// every publish.
+func TestPublishCatalogLevelSlots(t *testing.T) {
+	e := newSyncEnv(t)
+	x := publishFixture(t, e.db)
+	plan, err := BuildPublish(e.db, PublishOptions{CatalogID: e.cat.ID, RootID: x.root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CompletePublish(e.db, plan, accept(plan), "bob", nil); err != nil {
+		t.Fatal(err)
+	}
+	first := slotByKey(plan, "cred:"+x.credBW)
+	if first == nil || !first.New {
+		t.Fatalf("first space slot: %+v", first)
+	}
+
+	space2, _ := e.db.CreateFolder(store.NewFolder{Name: "Space two"})
+	if _, err := e.db.CreateConnection(store.NewConnection{Name: "b-1", Hostname: "b-1.example.com", FolderID: &space2.ID,
+		Overrides: store.InheritableSettings{AuthRef: ptr(x.credBW)}}); err != nil {
+		t.Fatal(err)
+	}
+	build := func(o PublishOptions) *PublishPlan {
+		t.Helper()
+		o.CatalogID, o.RootID = e.cat.ID, space2.ID
+		p, err := BuildPublish(e.db, o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(p.Refusals) > 0 {
+			t.Fatalf("refusals: %+v", p.Refusals)
+		}
+		return p
+	}
+	// Not admin, or an older server: a new slot in the new space, as before.
+	for _, o := range []PublishOptions{{Revision: CatalogSlotsRevision}, {Admin: true, Revision: CatalogSlotsRevision - 1}} {
+		if s := slotByKey(build(o), "cred:"+x.credBW); s == nil || !s.New || s.MoveToCatalog {
+			t.Fatalf("%+v: want a new slot, got %+v", o, s)
+		}
+	}
+	// Admin on revision 12: the first space's slot moves and is reused.
+	p := build(PublishOptions{Admin: true, Revision: CatalogSlotsRevision})
+	s := slotByKey(p, "cred:"+x.credBW)
+	if s == nil || s.New || !s.MoveToCatalog || s.UUID != first.UUID || len(p.Request.Slots) != 0 {
+		t.Fatalf("move and reuse: %+v, new slots %+v", s, p.Request.Slots)
+	}
+	// Unticked: a new slot instead, here at the catalog level, sent with
+	// folder_uuid null.
+	p = build(PublishOptions{Admin: true, Revision: CatalogSlotsRevision, SlotsAtCatalog: true, NoSlotMove: map[string]bool{"cred:" + x.credBW: true}})
+	s = slotByKey(p, "cred:"+x.credBW)
+	if s == nil || !s.New || !s.CatalogLevel || len(p.Request.Slots) != 1 {
+		t.Fatalf("catalog-level new slot: %+v", s)
+	}
+	raw, _ := json.Marshal(p.Request.Slots[0])
+	if !strings.Contains(string(raw), `"folder_uuid":null`) {
+		t.Fatalf("slot body: %s", raw)
+	}
+	// Once the slot is at the catalog level (as the feed brings it), every
+	// publish has it in scope, admin or not.
+	if _, err := e.db.Conn().Exec(`UPDATE catalog_slots SET folder_uuid = '' WHERE uuid = ?`, first.UUID); err != nil {
+		t.Fatal(err)
+	}
+	s = slotByKey(build(PublishOptions{Revision: CatalogSlotsRevision}), "cred:"+x.credBW)
+	if s == nil || s.New || s.MoveToCatalog || s.UUID != first.UUID || s.ReusedFrom != "the whole catalog" {
+		t.Fatalf("catalog-level slot in scope: %+v", s)
+	}
+}

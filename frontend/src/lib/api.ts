@@ -1297,11 +1297,19 @@ export interface CatalogPublishInput {
   no_shared_creds?: boolean;
   skip_creds?: string[];
   review_hash?: string;
+  // Catalog-level slots (admin, revision 12): new slots for the whole
+  // catalog; slot keys of other spaces not to move there and reuse.
+  slots_at_catalog?: boolean;
+  no_slot_move?: string[];
 }
 export interface PublishPlanRecord { kind: "folders" | "connections" | "forwards"; uuid: string; local_id: string; name: string; path: string; copy_of?: string }
 export interface PublishPlanSlot {
   key: string; uuid: string; type: "cred" | "net" | "jump"; name: string; new: boolean;
   kind?: string; backend?: string; bind_target: string; bind_name: string; reused_from?: string; used_by: number;
+  /** An existing slot of another space the publish moves to the catalog level and reuses. */
+  move_to_catalog?: boolean; rev?: number;
+  /** A new slot made for the whole catalog. */
+  catalog_level?: boolean;
 }
 export interface PublishFreeText { kind: string; uuid: string; name: string; field: string; value: string; folder_level: boolean; inherited_from?: string }
 export interface PublishRefusal { kind: string; local_id: string; name: string; reason: string }
@@ -1310,6 +1318,8 @@ export interface PublishOutsideJump {
 export interface PublishPlan {
   records: PublishPlanRecord[];
   slots: PublishPlanSlot[];
+  /** Catalog-level slots on offer (admin, catalog protocol revision 12). */
+  catalog_slots?: boolean;
   free_text: PublishFreeText[];
   refusals: PublishRefusal[];
   outside_jumps: PublishOutsideJump[];
@@ -1364,6 +1374,8 @@ export interface SeenApp { device: string; version: string; last_seen: number }
 export interface CatalogSlotInfo {
   can_write?: boolean;
   folder_name?: string;
+  /** "" for a catalog-level slot (catalog protocol revision 12). */
+  folder_uuid?: string;
   catalog_id: string;
   uuid: string;
   type: "cred" | "net" | "jump";

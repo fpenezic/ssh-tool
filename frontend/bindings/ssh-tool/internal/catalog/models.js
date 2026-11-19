@@ -848,7 +848,8 @@ export class PlanSlot {
         }
         if (/** @type {any} */(false)) {
             /**
-             * Reused: where the existing slot lives (its folder's name).
+             * Reused: where the existing slot lives (its folder's name; "the
+             * whole catalog" for a catalog-level slot).
              * @member
              * @type {string | undefined}
              */
@@ -860,6 +861,31 @@ export class PlanSlot {
              * @type {number}
              */
             this["used_by"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * MoveToCatalog: an existing slot of another space, bound to the same
+             * thing here, that the publish moves to the catalog level first so
+             * this subtree can use it (admin, revision 12). Rev is its revision
+             * for that move. CatalogLevel: a new slot made at the catalog level.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["move_to_catalog"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["rev"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["catalog_level"] = undefined;
         }
 
         Object.assign(this, $$source);
@@ -898,6 +924,15 @@ export class PublishPlan {
              * @type {PlanSlot[]}
              */
             this["slots"] = [];
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * CatalogSlots: catalog-level slots are on offer (admin, revision 12):
+             * new slots can go to the whole catalog, other spaces' slots move there.
+             * @member
+             * @type {boolean | undefined}
+             */
+            this["catalog_slots"] = undefined;
         }
         if (!("free_text" in $$source)) {
             /**
@@ -977,12 +1012,12 @@ export class PublishPlan {
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType11;
         const $$createField1_0 = $$createType7;
-        const $$createField2_0 = $$createType13;
-        const $$createField3_0 = $$createType15;
-        const $$createField4_0 = $$createType17;
-        const $$createField6_0 = $$createType0;
-        const $$createField7_0 = $$createType19;
-        const $$createField8_0 = $$createType21;
+        const $$createField3_0 = $$createType13;
+        const $$createField4_0 = $$createType15;
+        const $$createField5_0 = $$createType17;
+        const $$createField7_0 = $$createType0;
+        const $$createField8_0 = $$createType19;
+        const $$createField9_0 = $$createType21;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("records" in $$parsedSource) {
             $$parsedSource["records"] = $$createField0_0($$parsedSource["records"]);
@@ -991,22 +1026,22 @@ export class PublishPlan {
             $$parsedSource["slots"] = $$createField1_0($$parsedSource["slots"]);
         }
         if ("free_text" in $$parsedSource) {
-            $$parsedSource["free_text"] = $$createField2_0($$parsedSource["free_text"]);
+            $$parsedSource["free_text"] = $$createField3_0($$parsedSource["free_text"]);
         }
         if ("refusals" in $$parsedSource) {
-            $$parsedSource["refusals"] = $$createField3_0($$parsedSource["refusals"]);
+            $$parsedSource["refusals"] = $$createField4_0($$parsedSource["refusals"]);
         }
         if ("outside_jumps" in $$parsedSource) {
-            $$parsedSource["outside_jumps"] = $$createField4_0($$parsedSource["outside_jumps"]);
+            $$parsedSource["outside_jumps"] = $$createField5_0($$parsedSource["outside_jumps"]);
         }
         if ("target_inherits" in $$parsedSource) {
-            $$parsedSource["target_inherits"] = $$createField6_0($$parsedSource["target_inherits"]);
+            $$parsedSource["target_inherits"] = $$createField7_0($$parsedSource["target_inherits"]);
         }
         if ("kept_local" in $$parsedSource) {
-            $$parsedSource["kept_local"] = $$createField7_0($$parsedSource["kept_local"]);
+            $$parsedSource["kept_local"] = $$createField8_0($$parsedSource["kept_local"]);
         }
         if ("images" in $$parsedSource) {
-            $$parsedSource["images"] = $$createField8_0($$parsedSource["images"]);
+            $$parsedSource["images"] = $$createField9_0($$parsedSource["images"]);
         }
         return new PublishPlan(/** @type {Partial<PublishPlan>} */($$parsedSource));
     }

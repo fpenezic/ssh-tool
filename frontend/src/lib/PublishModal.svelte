@@ -97,6 +97,13 @@
     }).catch((e) => (planErr = errMsg(e)));
   });
 
+  // Catalog-level slots: new slots go to the whole catalog by default when
+  // publishing a new space (every space can then use them); a slot of
+  // another space bound to the same thing is moved there unless unticked.
+  let slotsAtCatalogPick = $state<boolean | null>(null);
+  const slotsAtCatalog = $derived(slotsAtCatalogPick ?? targetUUID === "");
+  let noSlotMove = $state<Record<string, boolean>>({});
+
   const input = $derived<CatalogPublishInput>({
     catalog_id: catalogId,
     folder_id: folderId,
@@ -107,6 +114,8 @@
     no_shared_creds: !send.shared_creds,
     skip_creds: Object.keys(skipCreds).filter((k) => skipCreds[k]),
     jump_skip: Object.keys(jumpSkip).filter((k) => jumpSkip[k]),
+    slots_at_catalog: slotsAtCatalog,
+    no_slot_move: Object.keys(noSlotMove).filter((k) => noSlotMove[k]),
   });
 
   // Preview, rebuilt on every change (debounced: slot names are typed).
@@ -332,15 +341,25 @@
           {#if plan.slots.length > 0}
             <section>
               <h3>Slots <span class="dim">placeholders each reader binds to their own; yours are bound to what you use today</span></h3>
+              {#if plan.catalog_slots && (plan.slots.some((x) => x.new) || slotsAtCatalogPick !== null)}
+                <label class="dim slot-opt" title="A slot for the whole catalog can be used by every space; colleagues bind it once. Only admins can make or change one.">
+                  <input type="checkbox" checked={slotsAtCatalog} disabled={busy} onchange={(e) => (slotsAtCatalogPick = (e.currentTarget as HTMLInputElement).checked)} /> New slots for the whole catalog, not only this space
+                </label>
+              {/if}
               {#each plan.slots as s (s.key)}
                 <div class="slot" class:reused={!s.new}>
                   {#if s.type === "cred"}<IconKey size={13} />{:else if s.type === "net"}<IconVpn size={13} />{:else}<IconBastion size={13} />{/if}
                   {#if s.new}
                     <input class="slot-name" value={slotNames[s.key] ?? s.name} oninput={(e) => (slotNames = { ...slotNames, [s.key]: (e.currentTarget as HTMLInputElement).value })} title="The name colleagues see. Do not put customer details or secrets here." />
-                    <span class="tag">new</span>
+                    <span class="tag">new{s.catalog_level ? ", whole catalog" : ""}</span>
                   {:else}
                     <strong>{s.name}</strong>
-                    <span class="tag reused-tag">reused from {s.reused_from || "the catalog"}</span>
+                    <span class="tag reused-tag">{s.move_to_catalog ? `moves from ${s.reused_from} to the whole catalog` : `reused from ${s.reused_from || "the catalog"}`}</span>
+                  {/if}
+                  {#if s.move_to_catalog || noSlotMove[s.key]}
+                    <label class="dim" title="The slot already exists in another space and is bound to the same thing here. Moving it to the whole catalog lets this space use it too; everyone who bound it keeps their binding.">
+                      <input type="checkbox" checked={!noSlotMove[s.key]} disabled={busy} onchange={(e) => (noSlotMove = { ...noSlotMove, [s.key]: !(e.currentTarget as HTMLInputElement).checked })} /> reuse
+                    </label>
                   {/if}
                   {#if s.kind === "external"}<span class="tag">{s.backend} item</span>{/if}
                   {#if s.type === "cred"}
@@ -482,6 +501,7 @@
   .slot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 3px 6px; border-radius: var(--r-sm); font-size: var(--fs-sm); }
   .slot.reused { border: 1px solid color-mix(in srgb, var(--peach) 45%, transparent); }
   .slot-name { width: 14rem; }
+  .slot-opt { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; }
   .reused-note { flex-basis: 100%; margin: 0 0 0 20px; color: var(--peach); font-size: var(--fs-sm); }
   .jump { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-sm); padding: 2px 0 6px; }
   .jump label { display: flex; align-items: flex-start; gap: 5px; margin-left: 18px; }

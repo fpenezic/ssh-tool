@@ -277,7 +277,9 @@ func (a *App) CatalogUnboundFor(connIDs []string, purpose string) ([]CatalogPend
 			}
 			p := CatalogPendingSlot{CatalogID: catID, CatalogName: cat.Name, SlotUUID: u.uuid, Name: s.Name,
 				Type: s.Type, Role: u.role, DocMD: s.DocMD, Connections: counts[catID+"/"+u.uuid]}
-			if _, lid := a.slotFolderWritable(catID, s.FolderUUID); lid != "" {
+			if s.FolderUUID == "" {
+				p.FolderName = catalogLevelName
+			} else if _, lid := a.slotFolderWritable(catID, s.FolderUUID); lid != "" {
 				if f, err := a.db.GetFolder(lid); err == nil {
 					p.FolderName = f.Name
 				}
