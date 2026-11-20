@@ -12,15 +12,15 @@ import (
 // What an older Windows build sealed under the previous id derivation
 // (HOSTNAME first) still opens after COMPUTERNAME took precedence.
 func TestOpenForMachineLegacyWindowsID(t *testing.T) {
-	old := machineGOOS
-	machineGOOS = "windows"
-	t.Cleanup(func() { machineGOOS = old })
+	oldGOOS, oldFiles := machineGOOS, legacyMachineIDFiles
+	machineGOOS, legacyMachineIDFiles = "windows", nil // no host machine-id file, no macOS UUID
+	t.Cleanup(func() { machineGOOS, legacyMachineIDFiles = oldGOOS, oldFiles })
 	t.Setenv("HOSTNAME", "Legacy-Host")
 	t.Setenv("COMPUTERNAME", "CURRENT-HOST")
 
 	legacy := legacyMachineID()
-	if legacy == "" {
-		t.Fatal("legacy id equals the current one; the test setup did not change the derivation")
+	if legacy != "Legacy-Host" {
+		t.Fatalf("legacy id = %q, want Legacy-Host", legacy)
 	}
 	key, err := machineKeyFor(legacy)
 	if err != nil {
