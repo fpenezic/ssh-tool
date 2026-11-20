@@ -352,7 +352,7 @@ func legacyMachineID() string {
 	if err != nil {
 		return ""
 	}
-	old, err := machineIDFrom([]string{"/etc/machine-id", "/var/lib/dbus/machine-id"}, []string{"HOSTNAME", "COMPUTERNAME"})
+	old, err := machineIDFrom(legacyMachineIDFiles, []string{"HOSTNAME", "COMPUTERNAME"})
 	if err != nil || old == cur {
 		return ""
 	}
@@ -374,7 +374,7 @@ func machineIDFrom(files, envs []string) (string, error) {
 	// fallbacks because those are both weak AND absent in
 	// Finder-launched apps (no HOSTNAME in the GUI environment, which
 	// is why mac auto-unlock never worked before this branch).
-	if runtime.GOOS == "darwin" {
+	if machineGOOS == "darwin" {
 		if uuid := darwinPlatformUUID(); uuid != "" {
 			return uuid, nil
 		}
@@ -385,7 +385,7 @@ func machineIDFrom(files, envs []string) (string, error) {
 			return v, nil
 		}
 	}
-	if runtime.GOOS == "linux" {
+	if machineGOOS == "linux" {
 		if b, err := os.ReadFile("/proc/sys/kernel/hostname"); err == nil {
 			s := strings.TrimSpace(string(b))
 			if s != "" {
@@ -456,8 +456,12 @@ func userID() (string, error) {
 // started from the Start menu (another catalog token slot, a presence record
 // that looked like another machine).
 // machineGOOS is runtime.GOOS; a variable so a test can take the Windows
-// branches of the id derivation.
+// branches of the id derivation on any host.
 var machineGOOS = runtime.GOOS
+
+// legacyMachineIDFiles are the files the pre-fix derivation read on every
+// desktop OS (a variable so a test can leave out the host's own).
+var legacyMachineIDFiles = []string{"/etc/machine-id", "/var/lib/dbus/machine-id"}
 
 func machineIDFiles() []string {
 	if machineGOOS == "windows" {
