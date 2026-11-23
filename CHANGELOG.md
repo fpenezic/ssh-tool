@@ -7,9 +7,9 @@ while Wails v3 was a prerelease upstream.
 
 ---
 
-## [Unreleased]
+## [1.3.0] - Shared catalogs, security fixes for MCP, import and session sharing
 
-Shared catalogs: a connection tree your team shares from a self-hosted catalog server, kept in step on every machine, with each person's own credentials. Security fixes from an audit of the LLM (MCP) access, archive import and session sharing: each closes a way an untrusted input got more authority than the UI promised. Also: a VPN that needs a one-time code no longer asks for it again and again while you are away.
+Shared catalogs: a connection tree your team shares from a self-hosted catalog server, kept in step on every machine, with each person's own credentials. Security fixes from an audit of the LLM (MCP) access, archive import and session sharing: each closes a way an untrusted input got more authority than the UI promised. Also: a VPN that needs a one-time code no longer asks for it again and again while you are away, the MCP session tools work from Claude Desktop again, and Bitwarden items saved by newer clients open.
 
 ### Shared catalogs
 - **Attach a catalog** (Settings -> Catalogs): sign in through your browser, or add it with a code from the catalog's web page (also in the Android app). Its folders, connections and port forwards appear under the catalog's root folder and follow it on every sync. The catalog server is a separate self-hosted service and not open source at this time; ssh-tool is the client.
