@@ -15,6 +15,7 @@
 <script lang="ts">
   import { forwardBookmarks } from "./forwardBookmarks";
   import { tree, selection, sessions, paneTabs, view } from "./stores.svelte";
+  import { catalogs } from "./catalog.svelte";
   import { connectionActions } from "./connectionActions.svelte";
   import { api } from "./api";
   import { fuzzyMatch, highlightSegments, type FuzzyMatch } from "./fuzzy";
@@ -236,6 +237,9 @@
       });
     }
     for (const c of tree.connections) {
+      // Copies Match parked in "Matched to <catalog>" duplicate the catalog
+      // rows; the folder itself stays findable.
+      if (catalogs.inMatchPark(c.folder_id)) continue;
       const folderPathStr = c.folder_id ? folderPath(c.folder_id) : "";
       const label = folderPathStr ? `${folderPathStr} / ${c.name}` : c.name;
       const haystacks = [c.name, c.hostname ?? "", folderPathStr, ...(c.tags ?? [])];

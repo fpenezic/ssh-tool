@@ -38,6 +38,7 @@ Shared catalogs: a connection tree your team shares from a self-hosted catalog s
 - **Match my connections** removes the local folders your copies leave empty (Remove folders left empty, on by default; Undo brings them back), so the old tree does not stay behind as empty folders.
 - **No colour of your own on a catalog row**: picking no colour under My settings on a catalog connection or folder now clears the catalog's colour for you; before, it fell back to the catalog's colour.
 - **Slots for the whole catalog** (catalog servers from protocol revision 12): an admin publishing several spaces that use the same opkssh or Bitwarden item gets one slot for all of them instead of one per space; the publish moves an existing slot of another space to the catalog level and reuses it, and new slots can be made catalog-wide. Colleagues bind it once.
+- **Matched copies no longer show twice in search**. The copies Match my connections parks in "Matched to <catalog>" are left out of tree search and Ctrl+K, so a host comes up once, as the catalog connection. The folder stays in the tree with a note on what it holds.
 
 ### Interface
 - **Context menus no longer swallow the next click**: a click outside an open menu (on a tab, the toolbar, the title bar) now does what it clicks. Before, it only closed the menu, and on the title-bar tabs on Windows it did not even do that.

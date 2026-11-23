@@ -8,6 +8,7 @@
 // Not persisted: this is a transient narrowing aid, not a saved view.
 
 import { tree } from "./stores.svelte";
+import { catalogs } from "./catalog.svelte";
 
 // How long typing pauses before the tree applies the filter: a typed word
 // remounts the rows once, not once per letter (each pass mounts or drops
@@ -100,6 +101,9 @@ class NameFilterStore {
       }
     };
     for (const c of tree.connections) {
+      // Copies Match parked in "Matched to <catalog>": the catalog row is
+      // the one to find.
+      if (catalogs.inMatchPark(c.folder_id)) continue;
       if (hit(c.name, c.hostname, c.tags)) {
         conns.add(c.id);
         markUp(c.folder_id);

@@ -34,6 +34,33 @@ class CatalogStore {
   private wired = false;
   private notified = new Set<string>();
 
+  // The local top-level "Matched to <catalog>" folders Match my connections
+  // parks the replaced copies in (app_catalog_match.go matchParkName). Their
+  // connections duplicate catalog ones, so tree search and Ctrl-K leave them
+  // out; the folder itself stays in the tree.
+  matchParkFolders = $derived.by(() => {
+    void tree.version;
+    const names = new Set(this.list.map((c) => "Matched to " + c.name));
+    const out = new Set<string>();
+    if (names.size === 0) return out;
+    for (const f of tree.folders) {
+      if (f.parent_id === null && !f.catalog_id && names.has(f.name)) out.add(f.id);
+    }
+    return out;
+  });
+
+  // inMatchPark: the folder is a "Matched to" folder or sits inside one.
+  inMatchPark(folderId: string | null | undefined): boolean {
+    const parks = this.matchParkFolders;
+    if (!folderId || parks.size === 0) return false;
+    let id: string | null = folderId;
+    for (let guard = 0; id && guard < 64; guard++) {
+      if (parks.has(id)) return true;
+      id = tree.folderById(id)?.parent_id ?? null;
+    }
+    return false;
+  }
+
   get byRoot(): Map<string, CatalogInfo> {
     return new Map(this.list.map((c) => [c.root_folder_id, c]));
   }

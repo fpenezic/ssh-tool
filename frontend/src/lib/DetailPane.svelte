@@ -2248,6 +2248,9 @@
     <FleetCards folderId={folder.id} ids={folderFleetIds} label={folder.name} />
     {#if saveError}<div class="err save-err">{saveError}</div>{/if}
     <div class="form">
+      {#if catalogs.matchParkFolders.has(folder.id)}
+        <p class="hint span-2">Your copies of connections that Match my connections replaced with catalog ones. They still work, but tree search and Ctrl+K leave them out. Undo last match in the catalog's Match dialog brings back the copies still in this folder; once you delete the folder, they are gone for good.</p>
+      {/if}
       {#if isCatalogFolder && catRec}
         <CatalogBanner kind="folders" id={folder.id} name={folder.name} rec={catRec} {recordMode} onChanged={async () => { await tree.load(); await loadCatRec(); }} />
         {#if catRec.can_write}
