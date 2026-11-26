@@ -36,12 +36,17 @@ class PresenceTakeover {
   remaining = $state(0); // countdown seconds while requesting
   private timer: ReturnType<typeof setInterval> | null = null;
   private resolver: ((decision: "retry" | "cancel") => void) | null = null;
+  // Bumped by ask(): a bulk connect can open a new dialog while an older
+  // one's take-over is still awaiting; its result must not touch the new
+  // dialog.
+  private generation = 0;
 
   // ask parks a blocked connect: shows the dialog and resolves with
   // the user's decision. "retry" means the profile is free (or forced)
   // and the caller should attempt the connect again.
   ask(profileId: string, machineName: string): Promise<"retry" | "cancel"> {
     this.reset();
+    this.generation += 1;
     this.profileId = profileId;
     this.machineName = machineName;
     this.phase = "asking";
@@ -52,8 +57,10 @@ class PresenceTakeover {
   // takeOver writes the kill-request and polls until the remote owner
   // clears (retry) or the estimate elapses (timeout -> offer force).
   async takeOver() {
+    const gen = this.generation;
     try {
       const estimate = await api.networkProfileTakeOver(this.profileId);
+      if (gen !== this.generation) return;
       if (!estimate) {
         // Already free by the time we asked - just retry.
         this.finish("retry");
@@ -64,6 +71,7 @@ class PresenceTakeover {
       this.startCountdown();
       this.pollFreed();
     } catch (e) {
+      if (gen !== this.generation) return;
       toastErr(e);
       this.finish("cancel");
     }
@@ -72,10 +80,13 @@ class PresenceTakeover {
   // connectAnyway authorises one bring-up despite the live owner (both
   // peers will flap - the dialog warns).
   async connectAnyway() {
+    const gen = this.generation;
     try {
       await api.networkProfileConnectAnyway(this.profileId);
+      if (gen !== this.generation) return;
       this.finish("retry");
     } catch (e) {
+      if (gen !== this.generation) return;
       toastErr(e);
       this.finish("cancel");
     }
@@ -99,12 +110,14 @@ class PresenceTakeover {
   // pollFreed re-checks remote presence every few seconds; when the
   // owner's record is gone, the take-over succeeded.
   private async pollFreed() {
+    const gen = this.generation;
     const startPhase = this.phase;
     while (this.phase === "requesting") {
       await new Promise((r) => setTimeout(r, 3000));
-      if (this.phase !== "requesting") break;
+      if (gen !== this.generation || this.phase !== "requesting") break;
       try {
         const ro = await api.networkProfilePresence(this.profileId);
+        if (gen !== this.generation) return;
         if (!ro.active) {
           this.finish("retry");
           return;

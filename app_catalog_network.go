@@ -103,7 +103,19 @@ func isCatalogBackground(ctx context.Context) bool {
 // catalogTunnelDial is the profile dialer, swappable in tests.
 var catalogTunnelDial = func(a *App, profileID string, background bool) (func(ctx context.Context, network, addr string) (net.Conn, error), error) {
 	if background {
-		return a.wgBackgroundDialerFor(profileID)
+		d, err := a.wgBackgroundDialerFor(profileID)
+		// The tunnel is not up here and a background pass does not
+		// start it. When another machine holds it, say who (the
+		// catalog state names it and Sync now offers the take-over)
+		// instead of "waiting". Only then: a live local tunnel and the
+		// auto mode's direct route come first, and the presence read
+		// costs a sync round trip.
+		if errors.Is(err, inventory.ErrTunnelWaiting) {
+			if ro := a.NetworkProfilePresence(profileID); ro.Active {
+				return nil, fmt.Errorf("%s%s|%s", errProfileBusyPrefix, profileID, ro.MachineName)
+			}
+		}
+		return d, err
 	}
 	return a.wgDialerFor(profileID)
 }
