@@ -334,6 +334,9 @@ func (m *Manager) unlockMaterial(kdb store.KeepassDatabase) (master string, keyF
 			return "", nil, fmt.Errorf("keepass: read master from vault: %w", gerr)
 		}
 		if !ok {
+			if m.secrets.Unlocked() {
+				return "", nil, fmt.Errorf("keepass: the master password of %s is not stored on this machine; set it under Settings - External secrets", kdb.Name)
+			}
 			return "", nil, ErrVaultLocked
 		}
 		master = pw
@@ -344,6 +347,9 @@ func (m *Manager) unlockMaterial(kdb store.KeepassDatabase) (master string, keyF
 			return "", nil, fmt.Errorf("keepass: read key file from vault: %w", gerr)
 		}
 		if !ok {
+			if m.secrets.Unlocked() {
+				return "", nil, fmt.Errorf("keepass: the key file of %s is not stored on this machine; set it under Settings - External secrets", kdb.Name)
+			}
 			return "", nil, ErrVaultLocked
 		}
 		keyFile = []byte(kf)

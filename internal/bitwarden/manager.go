@@ -322,6 +322,9 @@ func (m *Manager) ensureOpen(srv store.BitwardenServer, force bool) (*openState,
 		return nil, fmt.Errorf("bitwarden: read master from vault: %w", err)
 	}
 	if !ok {
+		if m.secrets.Unlocked() {
+			return nil, fmt.Errorf("bitwarden: the master password of %s is not stored on this machine; set it under Settings - External secrets", srv.Name)
+		}
 		return nil, ErrVaultLocked
 	}
 
