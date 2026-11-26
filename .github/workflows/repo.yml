@@ -123,13 +123,13 @@ jobs:
             d="/tmp/cat/$tag"
             mkdir -p "$d"
             if ! gh release download "$tag" -R "$CATALOG_RELEASES_REPO" --dir "$d" \
-                --pattern 'SHA256SUMS' --pattern 'SHA256SUMS.sig' --pattern 'SHA256SUMS.pem' \
+                --pattern 'SHA256SUMS' --pattern 'SHA256SUMS.sigstore.json' \
                 --pattern '*.deb' --pattern '*.rpm' 2>/dev/null; then
               echo "ssh-tool-catalog: $tag could not be downloaded - skipping" >&2
               continue
             fi
             if ! (cd "$d" && cosign verify-blob \
-                  --signature SHA256SUMS.sig --certificate SHA256SUMS.pem \
+                  --bundle SHA256SUMS.sigstore.json \
                   --certificate-oidc-issuer https://gitlab.com \
                   --certificate-identity-regexp "$CATALOG_SIGNER" SHA256SUMS >/dev/null 2>&1); then
               echo "ssh-tool-catalog: $tag SHA256SUMS signature did not verify - skipping" >&2
