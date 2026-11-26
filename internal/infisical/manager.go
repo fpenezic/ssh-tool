@@ -189,7 +189,9 @@ func (m *Manager) fetchFromAnyServer(ref store.InfisicalRef, path string) (*stor
 	for i := range servers {
 		val, err := m.fetchSecret(servers[i], ref.ProjectID, ref.Environment, path, ref.Key)
 		if err != nil {
-			if errors.Is(err, ErrVaultLocked) {
+			// ErrVaultLocked also means "this one's unlock secret is not
+			// stored": only a vault that really locked stops the search.
+			if errors.Is(err, ErrVaultLocked) && !m.secrets.Unlocked() {
 				return nil, "", err // locked meanwhile: not a reason to ask the next server
 			}
 			lastErr = err

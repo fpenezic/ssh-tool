@@ -212,7 +212,9 @@ func (m *Manager) serverHolding(cipherID string) (*openState, error) {
 	for i := range servers {
 		st, err := m.ensureOpen(servers[i], false)
 		if err != nil {
-			if errors.Is(err, ErrVaultLocked) {
+			// ErrVaultLocked also means "this one's unlock secret is not
+			// stored": only a vault that really locked stops the search.
+			if errors.Is(err, ErrVaultLocked) && !m.secrets.Unlocked() {
 				return nil, err // locked meanwhile: not a reason to open the next one
 			}
 			lastErr = err
