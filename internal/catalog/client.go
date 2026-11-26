@@ -297,6 +297,11 @@ func (c *Client) SignIn(ctx context.Context, openBrowser func(string)) error {
 	}
 	tok, err := oauthpkce.Authorize(ctx, c.endpoints(m), m.Auth.ClientID, "", openBrowser)
 	if err != nil {
+		// From revision 26 the code exchange can answer seats_full too,
+		// not only a refresh: show the server's text the same way.
+		if sf := seatsFull(err); sf != nil {
+			return sf
+		}
 		return err
 	}
 	if tok.RefreshToken == "" {
