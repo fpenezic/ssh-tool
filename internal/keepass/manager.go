@@ -139,6 +139,9 @@ func (m *Manager) Resolve(ref store.KeepassRef) (secret string, fresh Freshness,
 	}
 	var st *openState
 	kdb, err := m.store.GetKeepassDatabase(ref.DBID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return "", "", fmt.Errorf("keepass: database %s: %w", ref.DBID, err)
+	}
 	if err != nil {
 		// Database registrations are per machine and do not travel with
 		// profile sync, but credentials do: a credential made on another

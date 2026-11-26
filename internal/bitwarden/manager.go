@@ -176,6 +176,9 @@ func (m *Manager) Resolve(ref store.BitwardenRef) (secret string, fresh Freshnes
 	}
 	var st *openState
 	srv, err := m.store.GetBitwardenServer(ref.ServerID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return "", "", fmt.Errorf("bitwarden: server %s: %w", ref.ServerID, err)
+	}
 	if err != nil {
 		// Server registrations are per machine and do not travel with
 		// profile sync, but credentials do: a credential made on another

@@ -140,6 +140,9 @@ func (m *Manager) Resolve(ref store.InfisicalRef) (secret string, fresh Freshnes
 	var val string
 	var ferr error
 	srv, err := m.store.GetInfisicalServer(ref.ServerID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return "", "", fmt.Errorf("infisical: server %s: %w", ref.ServerID, err)
+	}
 	if err != nil {
 		// Server registrations are per machine and do not travel with
 		// profile sync, but credentials do: a credential made on another
