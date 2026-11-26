@@ -173,6 +173,9 @@ func (m *Manager) databaseHolding(entryUUID string) (*openState, error) {
 	for i := range dbs {
 		st, err := m.ensureOpen(dbs[i], false)
 		if err != nil {
+			if errors.Is(err, ErrVaultLocked) {
+				return nil, err // locked meanwhile: not a reason to open the next one
+			}
 			lastErr = err
 			continue
 		}

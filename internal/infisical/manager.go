@@ -179,7 +179,9 @@ func (m *Manager) fetchFromAnyServer(ref store.InfisicalRef, path string) (*stor
 	m.mu.Unlock()
 	for i, s := range servers {
 		if s.ID == prev && i > 0 {
-			servers[0], servers[i] = servers[i], servers[0]
+			// To the front, the rest keeping their list order.
+			copy(servers[1:i+1], servers[0:i])
+			servers[0] = s
 			break
 		}
 	}
@@ -187,6 +189,9 @@ func (m *Manager) fetchFromAnyServer(ref store.InfisicalRef, path string) (*stor
 	for i := range servers {
 		val, err := m.fetchSecret(servers[i], ref.ProjectID, ref.Environment, path, ref.Key)
 		if err != nil {
+			if errors.Is(err, ErrVaultLocked) {
+				return nil, "", err // locked meanwhile: not a reason to ask the next server
+			}
 			lastErr = err
 			continue
 		}
