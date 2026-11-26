@@ -57,7 +57,7 @@ A tree of connections with folder-level inherited settings, an encrypted credent
 ### Shared catalogs
 
 - **One tree for the team** - folders, connections and forwards from a self-hosted catalog server appear under the catalog's folder and follow it on every sync; sign in through the browser or with a one-time code.
-- **Secrets stay personal** - vault credentials and VPN profiles are never sent; colleagues set their own under My settings, or bind a Bitwarden / Vaultwarden item or opkssh slot once for every connection that uses it.
+- **Secrets stay personal** - vault credentials and VPN profiles are never sent; colleagues set their own under My settings, or bind a Bitwarden / Vaultwarden item or opkssh placeholder once for every connection that uses it.
 - **Publish with a review** - a folder or a single connection (right-click or drag), with every free-text value shown before it goes and a choice of what to send.
 - **Your view, your settings** - hide catalog folders you do not work with; local changes (port, user, notes, icon) stay yours and can be reset; writers edit the record for everyone.
 - **Move over without retyping** - "Match my connections" pairs the connections you already had with the catalog's by host and port and moves your credentials, logins, forwards and workspaces onto them; your copies are kept and one Undo puts it back.

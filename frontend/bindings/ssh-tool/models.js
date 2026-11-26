@@ -2162,6 +2162,22 @@ export class CatalogPendingSlot {
              */
             this["connections"] = 0;
         }
+        if (/** @type {any} */(false)) {
+            /**
+             * Backend and OpenURL: an external slot's backend and its item in that
+             * backend's web vault ("" when the catalog has no link for it).
+             * @member
+             * @type {string | undefined}
+             */
+            this["backend"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["open_url"] = undefined;
+        }
 
         Object.assign(this, $$source);
     }
@@ -2984,6 +3000,15 @@ export class CatalogSlotInfo {
              * @type {boolean | undefined}
              */
             this["covered"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * OpenURL: the item in the backend's web vault, from the catalog's
+             * external_links (https only); "" when the catalog has no link for it.
+             * @member
+             * @type {string | undefined}
+             */
+            this["open_url"] = undefined;
         }
 
         Object.assign(this, $$source);

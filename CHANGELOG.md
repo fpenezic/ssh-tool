@@ -7,6 +7,20 @@ while Wails v3 was a prerelease upstream.
 
 ---
 
+## [Unreleased]
+
+### Shared catalogs
+- **"Slots" are now called placeholders**, in the app and on the catalog's web pages: a placeholder names what a connection needs (a credential, a network or a jump host), and each person binds it to their own; the catalog never holds the secret. Placeholders every space can use are listed under **All spaces**. Only the wording changed: existing bindings, catalogs and older apps are unaffected.
+- **Access to a single connection** (catalog servers from protocol revision 23): when a catalog manager gives you write access to one connection, you can edit it and its forwards for everyone, even inside a folder you only read or see as an outline. Moving or deleting it stays with the folder's writers.
+- **Open in Bitwarden** on a placeholder backed by a Bitwarden / Vaultwarden item, in Settings -> Catalogs and in the connect dialog, when the catalog's operator has set a link for it: the item opens in the team's web vault with your own account, for example to ask for access. Only https links open; a change of the link reaches the app on the next sync.
+
+### Network profiles
+- **A WireGuard profile up on your other machine now offers the take-over everywhere**: connecting to a dynamic inventory host (double-click in the tree, Ctrl+K) and Connect on a network profile asked nothing and failed with a plain "not reachable"; they now show the same "Network profile in use" dialog (Take over / Connect anyway) as saved connections.
+- A catalog behind such a profile no longer fails with a raw error on every background sync, and never asks: its state says the profile is in use on the other machine, and **Sync now** offers the take-over.
+
+### Fixes
+- **The log file is written again on Windows**: `%APPDATA%\ssh-tool\logs\app.log` stayed empty when the app was started normally (from the Start menu or a shortcut), because a failed write to the missing console stopped the line before it reached the file.
+
 ## [1.3.0] - Shared catalogs, security fixes for MCP, import and session sharing
 
 Shared catalogs: a connection tree your team shares from a self-hosted catalog server, kept in step on every machine, with each person's own credentials. Security fixes from an audit of the LLM (MCP) access, archive import and session sharing: each closes a way an untrusted input got more authority than the UI promised. Also: a VPN that needs a one-time code no longer asks for it again and again while you are away, the MCP session tools work from Claude Desktop again, and Bitwarden items saved by newer clients open.

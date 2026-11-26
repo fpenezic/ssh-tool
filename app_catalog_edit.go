@@ -32,6 +32,45 @@ func catalogWritable(raw string) bool {
 	return r.Access == "write" || r.Access == "manage"
 }
 
+// recordAccess is a record's "access" field ("" when the server sent none).
+func recordAccess(raw string) string {
+	var r struct {
+		Access string `json:"access"`
+	}
+	_ = json.Unmarshal([]byte(raw), &r)
+	return r.Access
+}
+
+// catalogRecordEditable reports whether the user may edit a record for
+// everyone. A connection carries its own effective access (catalog
+// revision 23: the folder's role raised by grants on the connection, so a
+// connection under a skeleton folder can be writable); a forward goes by
+// its connection. Older servers send no access on connections: then the
+// folder's decides, as before. Moving or deleting a connection, and
+// creating anything in a folder, always go by the folder (fraw).
+func (a *App) catalogRecordEditable(kind, id, fraw string) bool {
+	connID := ""
+	switch kind {
+	case catalog.KindConnections:
+		connID = id
+	case catalog.KindForwards:
+		if f, err := a.db.GetPortForward(id); err == nil && f != nil {
+			connID = f.ConnectionID
+		}
+	}
+	if connID != "" {
+		if _, _, _, craw, err := a.catalogRow(catalog.KindConnections, connID); err == nil {
+			switch recordAccess(craw) {
+			case "write", "manage":
+				return true
+			case "read", "skeleton":
+				return false
+			}
+		}
+	}
+	return catalogWritable(fraw)
+}
+
 func recordRev(raw string) int64 {
 	var r struct {
 		Rev int64 `json:"rev"`
@@ -68,7 +107,19 @@ func (a *App) catalogWriteGuard(catalogID string) (*store.Catalog, *catalog.Clie
 	return cat, c, nil
 }
 
+// catalogWriteTarget is the target of an edit of the record itself (save,
+// a forward's move or delete): the record's own access decides.
 func (a *App) catalogWriteTarget(kind, id string) (*catalogWriteTarget, error) {
+	return a.catalogWriteTargetFor(kind, id, false)
+}
+
+// catalogStructTarget is the target of a move or delete of a folder or
+// connection, or of a duplicate next to it: the folder's access decides.
+func (a *App) catalogStructTarget(kind, id string) (*catalogWriteTarget, error) {
+	return a.catalogWriteTargetFor(kind, id, kind != catalog.KindForwards)
+}
+
+func (a *App) catalogWriteTargetFor(kind, id string, byFolder bool) (*catalogWriteTarget, error) {
 	catID, u, state, raw, err := a.catalogRow(kind, id)
 	if err != nil {
 		return nil, err
@@ -84,8 +135,11 @@ func (a *App) catalogWriteTarget(kind, id string) (*catalogWriteTarget, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !catalogWritable(fraw) {
+	if byFolder && !catalogWritable(fraw) {
 		return nil, fmt.Errorf("you can read this catalog folder but not change it")
+	}
+	if !byFolder && !a.catalogRecordEditable(kind, id, fraw) {
+		return nil, fmt.Errorf("you can read this catalog record but not change it")
 	}
 	return &catalogWriteTarget{cat: cat, client: c, uuid: u, raw: raw, rev: recordRev(raw),
 		scope: catalog.RecordScope{FolderUUID: fu, FolderLocalID: fid}}, nil
@@ -159,7 +213,7 @@ func (a *App) CatalogRecordSave(in catalog.EditInput) (*CatalogSaveResult, error
 		res.Message = "the record changed in the catalog since you opened it"
 		return res, nil
 	case len(plan.NeedSlots) > 0:
-		res.Message = "name the new slot(s) first"
+		res.Message = "name the new placeholder(s) first"
 		return res, nil
 	case len(plan.Changed) == 0:
 		res.Message = "nothing changed"
@@ -181,7 +235,7 @@ func (a *App) CatalogRecordSave(in catalog.EditInput) (*CatalogSaveResult, error
 			"backend": s.Backend, "external_ref": s.ExternalRef, "doc_md": ""}
 		w, err := t.client.Create(ctx, catalog.KindSlots, body)
 		if err != nil {
-			res.Message = "not saved: the new slot " + s.Name + ": " + catalogShortError(err)
+			res.Message = "not saved: the new placeholder " + s.Name + ": " + catalogShortError(err)
 			return res, nil
 		}
 		items = append(items, catalog.UpsertItem(catalog.KindSlots, w.Record))
@@ -329,7 +383,7 @@ func (a *App) CatalogCreate(in CatalogCreateInput) (string, error) {
 // CatalogMove moves a record to another folder (a forward to another
 // connection) of the same catalog.
 func (a *App) CatalogMove(kind, id, newParentID string) error {
-	t, err := a.catalogWriteTarget(kind, id)
+	t, err := a.catalogStructTarget(kind, id)
 	if err != nil {
 		return err
 	}
@@ -357,6 +411,11 @@ func (a *App) CatalogMove(kind, id, newParentID string) error {
 		if parentKind == catalog.KindFolders && !catalogWritable(praw) {
 			return fmt.Errorf("you cannot add to that folder")
 		}
+		if parentKind == catalog.KindConnections {
+			if _, _, fraw, err := a.db.CatalogFolderOf(catalog.KindConnections, newParentID); err != nil || !a.catalogRecordEditable(catalog.KindConnections, newParentID, fraw) {
+				return fmt.Errorf("you cannot change that connection")
+			}
+		}
 		target = pu
 	}
 	ctx, cancel := catalogWriteCtx()
@@ -379,7 +438,7 @@ func (a *App) CatalogMove(kind, id, newParentID string) error {
 // CatalogDelete deletes a record from the catalog for everyone; the
 // writer's own local data on it goes too (the confirm says so).
 func (a *App) CatalogDelete(kind, id string, recursive bool) error {
-	t, err := a.catalogWriteTarget(kind, id)
+	t, err := a.catalogStructTarget(kind, id)
 	if err != nil {
 		return err
 	}
@@ -475,10 +534,10 @@ func (a *App) CatalogSlotCreate(in CatalogSlotInput) error {
 		return err
 	}
 	if strings.TrimSpace(in.Name) == "" {
-		return fmt.Errorf("a slot needs a name")
+		return fmt.Errorf("a placeholder needs a name")
 	}
 	if in.Type != "cred" && in.Type != "net" && in.Type != "jump" {
-		return fmt.Errorf("a slot is a credential, a network or a bastion")
+		return fmt.Errorf("a placeholder is a credential, a network or a bastion")
 	}
 	fc, fu, _, fraw, err := a.catalogRow(catalog.KindFolders, in.FolderID)
 	if err != nil || fc != cat.ID {
@@ -509,7 +568,7 @@ func (a *App) catalogSlot(catalogID, slotUUID string) (*store.CatalogSlot, error
 			return &slots[i], nil
 		}
 	}
-	return nil, fmt.Errorf("no such slot in this catalog")
+	return nil, fmt.Errorf("no such placeholder in this catalog")
 }
 
 // CatalogSlotUpdate renames a slot, changes its documentation or, for a
@@ -524,7 +583,7 @@ func (a *App) CatalogSlotUpdate(in CatalogSlotInput) error {
 		return err
 	}
 	if ok, _ := a.slotFolderWritable(cat.ID, s.FolderUUID); !ok {
-		return fmt.Errorf("you can read this slot but not change it")
+		return fmt.Errorf("you can read this placeholder but not change it")
 	}
 	in.Type = s.Type
 	ctx, cancel := catalogWriteCtx()
@@ -533,7 +592,7 @@ func (a *App) CatalogSlotUpdate(in CatalogSlotInput) error {
 	if err != nil {
 		if cur, ok := catalog.RevMismatch(err); ok {
 			_ = a.catalogApply(cat, []catalog.Item{catalog.UpsertItem(catalog.KindSlots, cur)})
-			return fmt.Errorf("the slot changed in the catalog meanwhile; it is updated here, change it again")
+			return fmt.Errorf("the placeholder changed in the catalog meanwhile; it is updated here, change it again")
 		}
 		return fmt.Errorf("not saved: %s", catalogShortError(err))
 	}
@@ -552,7 +611,7 @@ func (a *App) CatalogSlotDelete(catalogID, slotUUID string) error {
 		return err
 	}
 	if ok, _ := a.slotFolderWritable(cat.ID, s.FolderUUID); !ok {
-		return fmt.Errorf("you can read this slot but not change it")
+		return fmt.Errorf("you can read this placeholder but not change it")
 	}
 	ctx, cancel := catalogWriteCtx()
 	defer cancel()
@@ -606,7 +665,7 @@ func (a *App) CatalogDuplicate(id, name, hostname string) (*CatalogDuplicateResu
 	if name == "" || hostname == "" {
 		return nil, fmt.Errorf("a name and a hostname are needed")
 	}
-	t, err := a.catalogWriteTarget(catalog.KindConnections, id)
+	t, err := a.catalogStructTarget(catalog.KindConnections, id)
 	if err != nil {
 		return nil, err
 	}

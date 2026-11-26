@@ -338,7 +338,7 @@ func union(a, b map[string]any) map[string]bool {
 // reverseSettings turns changed settings values from local ids into
 // catalog references, collecting the slots that must be created.
 func reverseSettings(db *store.DB, cat *store.Catalog, scope RecordScope, in EditInput, vals map[string]any, plan *EditPlan) (map[string]any, error) {
-	c := &pubCtx{db: db, strict: true, opts: PublishOptions{CatalogID: cat.ID, RootID: scope.FolderLocalID, TargetUUID: scope.FolderUUID, SlotNames: in.SlotNames},
+	c := &pubCtx{db: db, strict: true, editOnly: true, opts: PublishOptions{CatalogID: cat.ID, RootID: scope.FolderLocalID, TargetUUID: scope.FolderUUID, SlotNames: in.SlotNames},
 		plan:    &PublishPlan{Layers: map[string]PlanLayer{}, catalogID: cat.ID},
 		folders: map[string]store.Folder{}, children: map[string][]string{}, conns: map[string]store.Connection{},
 		byFolder: map[string][]store.Connection{}, fwds: map[string][]store.PortForward{},

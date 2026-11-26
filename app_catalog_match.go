@@ -825,7 +825,7 @@ func (m *matchCtx) plan(pairs [][2]string, a *App) *matchOps {
 		for s, b := range o.bindings {
 			for _, w := range slotWants {
 				if w.key == s && w.conn == c.ID && w.val == b[1] {
-					lines = append(lines, CatalogMatchChange{Field: "Slot " + strconv.Quote(m.slots[s].Name), Value: a.matchValue(b[0], json.RawMessage(strconv.Quote(b[1])), o.repoint), Where: "slot"})
+					lines = append(lines, CatalogMatchChange{Field: "Placeholder " + strconv.Quote(m.slots[s].Name), Value: a.matchValue(b[0], json.RawMessage(strconv.Quote(b[1])), o.repoint), Where: "slot"})
 					break
 				}
 			}

@@ -94,7 +94,7 @@ class CatalogStore {
     if (!this.byId(m.catalogId)) return "not set - choose one";
     const slot = this.slots[m.catalogId]?.find((s) => s.uuid === m.uuid);
     if (!m.unbound) return "not available to you - set your own";
-    return slot ? `slot "${slot.name}" not bound` : "catalog slot not bound";
+    return slot ? `placeholder "${slot.name}" not bound` : "catalog placeholder not bound";
   }
 
   init() {

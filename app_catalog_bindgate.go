@@ -44,6 +44,10 @@ type CatalogPendingSlot struct {
 	// Connections: how many connections of this catalog on this machine
 	// use the slot for anything (directly or through a bastion).
 	Connections int `json:"connections"`
+	// Backend and OpenURL: an external slot's backend and its item in that
+	// backend's web vault ("" when the catalog has no link for it).
+	Backend string `json:"backend,omitempty"`
+	OpenURL string `json:"open_url,omitempty"`
 }
 
 // Connect order: the bastion is dialled first, then the network, then the
@@ -276,7 +280,11 @@ func (a *App) CatalogUnboundFor(connIDs []string, purpose string) ([]CatalogPend
 				continue
 			}
 			p := CatalogPendingSlot{CatalogID: catID, CatalogName: cat.Name, SlotUUID: u.uuid, Name: s.Name,
-				Type: s.Type, Role: u.role, DocMD: s.DocMD, Connections: counts[catID+"/"+u.uuid]}
+				Type: s.Type, Role: u.role, DocMD: s.DocMD, Connections: counts[catID+"/"+u.uuid],
+				OpenURL: a.catalogSlotLink(catID, s)}
+			if p.OpenURL != "" {
+				p.Backend = s.Backend
+			}
 			if s.FolderUUID == "" {
 				p.FolderName = catalogLevelName
 			} else if _, lid := a.slotFolderWritable(catID, s.FolderUUID); lid != "" {

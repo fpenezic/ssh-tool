@@ -16,7 +16,7 @@
   import { forwardBookmarks } from "./forwardBookmarks";
   import { tree, selection, sessions, paneTabs, view } from "./stores.svelte";
   import { catalogs } from "./catalog.svelte";
-  import { connectionActions } from "./connectionActions.svelte";
+  import { connectionActions, withTakeover } from "./connectionActions.svelte";
   import { api } from "./api";
   import { fuzzyMatch, highlightSegments, type FuzzyMatch } from "./fuzzy";
   import { clickOutside } from "./clickOutside";
@@ -555,7 +555,10 @@
           if (!ok) return;
         }
         try {
-          const res = await api.sshConnectDynamic(e.folderId, e.entryId);
+          const out = await withTakeover(() => api.sshConnectDynamic(e.folderId, e.entryId));
+          if (!out.ok && out.cancelled) return;
+          if (!out.ok) throw out.error;
+          const res = out.value;
           sessions.add({
             sessionId: res.session_id,
             connectionId: "dyn:" + e.entryId,
@@ -652,7 +655,10 @@
         if (!ok) continue;
       }
       try {
-        const res = await api.sshConnectDynamic(m.folderId, m.entryId);
+        const out = await withTakeover(() => api.sshConnectDynamic(m.folderId, m.entryId));
+        if (!out.ok && out.cancelled) continue;
+        if (!out.ok) throw out.error;
+        const res = out.value;
         sessions.add({
           sessionId: res.session_id,
           connectionId: "dyn:" + m.entryId,

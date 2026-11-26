@@ -11,13 +11,15 @@
   import { catalogLocal } from "./catalogLocal.svelte";
   import { toast } from "./toast.svelte.ts";
   import { errMsg } from "./connectErrors";
+  import { syncCatalogWithTakeover } from "./connectionActions.svelte";
   import { api, type CatalogInfo, type CatalogSlotInfo } from "./api";
   import { catalogs, catalogStateLabel } from "./catalog.svelte";
   import { credentials, tree } from "./stores.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
   import { renderMarkdown } from "./markdown";
   import { isMobile } from "./platform";
-  import { IconKey, IconVpn, IconBastion, IconRefresh, IconTrash, IconAlertTriangle } from "./iconMap";
+  import { IconKey, IconVpn, IconBastion, IconRefresh, IconTrash, IconAlertTriangle, IconExternalLink } from "./iconMap";
+  import { externalBackendLabel } from "./catalogMarks";
 
   let addURL = $state("");
   let adding = $state(false);
@@ -33,7 +35,7 @@
   async function saveSlotEdit(c: CatalogInfo, s: CatalogSlotInfo) {
     if (!slotEdit) return;
     const e = slotEdit;
-    await run(c.id, "Save slot", async () => {
+    await run(c.id, "Save placeholder", async () => {
       await api.catalogSlotUpdate({ catalog_id: c.id, uuid: s.uuid, type: s.type, name: e.name, kind: s.kind, backend: s.backend,
         external_ref: s.external_ref_json ? JSON.parse(s.external_ref_json) : null, doc_md: e.doc });
       slotEdit = null;
@@ -41,9 +43,9 @@
     });
   }
   async function deleteSlot(c: CatalogInfo, s: CatalogSlotInfo) {
-    const ok = await showConfirm({ title: "Delete slot", message: `Delete the slot "${s.name}" from the catalog? Everyone's binding of it goes with it.`, okLabel: "Delete", danger: true });
+    const ok = await showConfirm({ title: "Delete placeholder", message: `Delete the placeholder "${s.name}" from the catalog? Everyone's binding of it goes with it.`, okLabel: "Delete", danger: true });
     if (!ok) return;
-    await run(c.id, "Delete slot", async () => {
+    await run(c.id, "Delete placeholder", async () => {
       await api.catalogSlotDelete(c.id, s.uuid);
       await catalogs.loadSlots(c.id);
     });
@@ -51,7 +53,7 @@
   async function addSlot(c: CatalogInfo) {
     if (!slotAdd || !slotAdd.name.trim() || !slotAdd.folder) return;
     const a = slotAdd;
-    await run(c.id, "New slot", async () => {
+    await run(c.id, "New placeholder", async () => {
       await api.catalogSlotCreate({ catalog_id: c.id, folder_id: a.folder, type: a.type, name: a.name.trim(), doc_md: a.doc });
       slotAdd = null;
       await catalogs.loadSlots(c.id);
@@ -146,7 +148,7 @@
     const r = await showConfirmWithCheckbox({
       title: "Remove catalog",
       message: `Remove "${c.name}" from this app? Its connections, your bindings and your local settings on them go. Nothing on the server changes.`,
-      checkedMessage: `Remove "${c.name}" from this app and keep its connections as your own local folder, working as they do now? Slots you have not bound become empty fields, noted on each connection. Nothing on the server changes.`,
+      checkedMessage: `Remove "${c.name}" from this app and keep its connections as your own local folder, working as they do now? Placeholders you have not bound become empty fields, noted on each connection. Nothing on the server changes.`,
       checkboxLabel: "Keep its connections as a local folder",
       okLabel: "Remove",
       danger: true,
@@ -189,7 +191,7 @@
   function optionsFor(s: CatalogSlotInfo) {
     return s.type === "cred" ? credOptions : s.type === "net" ? netOptions : jumpOptions;
   }
-  const typeLabel = { cred: "Credential", net: "Network profile", jump: "Bastion" } as const;
+  const typeLabel = { cred: "Credential", net: "Network profile", jump: "Jump host" } as const;
 
   async function bind(c: CatalogInfo, s: CatalogSlotInfo, target: string) {
     if (!target || target === s.target_id) return;
@@ -223,6 +225,14 @@
     }
   }
 
+  async function openExternal(url: string) {
+    try {
+      await api.openURL(url);
+    } catch (e) {
+      toast.err(errMsg(e));
+    }
+  }
+
   function onDocClick(e: MouseEvent) {
     const a = (e.target as HTMLElement | null)?.closest("a[data-md-link]") as HTMLAnchorElement | null;
     if (!a) return;
@@ -251,10 +261,13 @@
       {:else if s.state === "external"}
         <span class="chip tone-ok" title="Found in your Bitwarden / Vaultwarden">from {s.target_name}</span>
       {/if}
-      <span class="slot-used">{s.used_by} {s.used_by === 1 ? "record" : "records"}{#if s.folder_name} - on {s.folder_name}{/if}</span>
+      <span class="slot-used">{s.used_by} {s.used_by === 1 ? "record" : "records"}{#if s.folder_name}{" - on " + s.folder_name}{/if}</span>
+      {#if s.open_url}
+        <button class="slot-act" onclick={() => openExternal(s.open_url!)} title={"Open this item in " + externalBackendLabel(s.backend) + " with your own account, for example to ask for access"}><IconExternalLink size={12} /> Open in {externalBackendLabel(s.backend)}</button>
+      {/if}
       {#if s.can_write && !isMobile}
-        <button class="slot-act" onclick={() => (slotEdit = { uuid: s.uuid, name: s.name, doc: s.doc_md })} title="Rename or document this slot for everyone">Edit</button>
-        <button class="slot-act danger" onclick={() => deleteSlot(c, s)} title="Delete this slot from the catalog"><IconTrash size={12} /></button>
+        <button class="slot-act" onclick={() => (slotEdit = { uuid: s.uuid, name: s.name, doc: s.doc_md })} title="Rename or document this placeholder for everyone">Edit</button>
+        <button class="slot-act danger" onclick={() => deleteSlot(c, s)} title="Delete this placeholder from the catalog"><IconTrash size={12} /></button>
       {/if}
     </div>
     {#if slotEdit && slotEdit.uuid === s.uuid}
@@ -272,7 +285,7 @@
       <div class="slot-doc md" role="presentation" onclick={onDocClick}>{@html renderMarkdown(s.doc_md)}</div>
     {/if}
     {#if s.kind === "external" && s.state === "unbound"}
-      <p class="hint sub">Names an item in Bitwarden / Vaultwarden. Register a server under External secrets, or bind the slot by hand.</p>
+      <p class="hint sub">Names an item in Bitwarden / Vaultwarden. Register a server under External secrets, or bind the placeholder by hand.</p>
     {/if}
     <div class="slot-bind">
       <SearchableSelect
@@ -293,7 +306,7 @@
 <p class="hint">
   A catalog is a connection tree your team shares from a catalog server. Its
   connections show up in your tree and stay in step with it. Secrets are never
-  shared: each slot is bound once to something of your own.
+  shared: each placeholder is bound once to something of your own.
 </p>
 
 {#if catalogs.list.length === 0}
@@ -317,7 +330,7 @@
             <button class="primary" disabled={busy[c.id]} onclick={() => run(c.id, "Sign in", () => api.catalogSignIn(c.id))}>Sign in</button>
             <button title="Sign in with a code from the catalog's web page" onclick={() => catalogs.startEnroll(c.base_url, "")}>Code</button>
           {:else if c.state !== "locked" && c.state !== "no_login" && c.state !== "signed_out"}
-            <button title="Sync now" disabled={busy[c.id] || c.state === "syncing"} onclick={() => run(c.id, "Sync", () => api.catalogSyncNow(c.id))}>
+            <button title="Sync now" disabled={busy[c.id] || c.state === "syncing"} onclick={() => run(c.id, "Sync", () => syncCatalogWithTakeover(c.id))}>
               <IconRefresh size={14} /> Sync
             </button>
           {/if}
@@ -372,11 +385,11 @@
           <button onclick={() => (matching = { id: c.id, name: c.name })}>Match my connections...</button>
         </div>
         <div class="slots">
-          <h3>Slots <span class="hint-inline">{all.length === 0 ? "" : `${all.length} - ${todo.length === 0 ? "all bound" : `${todo.length} to bind`}`}</span></h3>
+          <h3>Placeholders <span class="hint-inline">{all.length === 0 ? "" : `${all.length} - ${todo.length === 0 ? "all bound" : `${todo.length} to bind`}`}</span></h3>
           {#if all.length === 0}
             <p class="hint">This catalog asks for nothing.</p>
           {:else if todo.length > 0}
-            <p class="hint sub">Bind each once to something of your own; every connection that uses it works then. A connection's editor binds its own slots too.</p>
+            <p class="hint sub">Bind each once to something of your own; every connection that uses it works then. A connection's editor binds its own placeholders too.</p>
           {/if}
           {#each groupByFolder(todo) as g (g.folder)}
             {#if g.folder}<div class="slot-group">{g.folder}</div>{/if}
@@ -384,15 +397,15 @@
           {/each}
           {#if bound > 0}
             <button class="slot-toggle" onclick={() => (showBound = { ...showBound, [c.id]: !showBound[c.id] })} aria-expanded={!!showBound[c.id]}>
-              {showBound[c.id] ? "Hide" : "Show"} {bound} bound {bound === 1 ? "slot" : "slots"}
+              {showBound[c.id] ? "Hide" : "Show"} {bound} bound {bound === 1 ? "placeholder" : "placeholders"}
             </button>
             {#if showBound[c.id]}
-              <input class="slot-filter" placeholder="Filter by slot, what it is bound to or folder..." value={boundFilter[c.id] ?? ""}
+              <input class="slot-filter" placeholder="Filter by placeholder, what it is bound to or folder..." value={boundFilter[c.id] ?? ""}
                 oninput={(e) => (boundFilter = { ...boundFilter, [c.id]: (e.currentTarget as HTMLInputElement).value })} />
               {@const shown = boundShown(c)}
               {#each shown.slice(0, 200) as s (s.uuid)}{@render slotRow(c, s)}{/each}
               {#if shown.length > 200}<p class="hint sub">{shown.length - 200} more; narrow the filter.</p>{/if}
-              {#if shown.length === 0}<p class="hint sub">No bound slot matches.</p>{/if}
+              {#if shown.length === 0}<p class="hint sub">No bound placeholder matches.</p>{/if}
             {/if}
           {/if}
           {#if !isMobile && writableFolders(c.id).length > 0}
@@ -407,7 +420,7 @@
                   <select bind:value={slotAdd.type}>
                     <option value="cred">Credential</option>
                     <option value="net">Network</option>
-                    <option value="jump">Bastion</option>
+                    <option value="jump">Jump host</option>
                   </select>
                 </label>
                 <label>Name <input bind:value={slotAdd.name} placeholder="what colleagues bind, e.g. customer-admin" /></label>
@@ -418,7 +431,7 @@
                 </div>
               </div>
             {:else}
-              <button class="slot-add" onclick={() => (slotAdd = { catalog: c.id, folder: writableFolders(c.id)[0].id, type: "cred", name: "", doc: "" })}>+ New slot</button>
+              <button class="slot-add" onclick={() => (slotAdd = { catalog: c.id, folder: writableFolders(c.id)[0].id, type: "cred", name: "", doc: "" })}>+ New placeholder</button>
             {/if}
           {/if}
         </div>

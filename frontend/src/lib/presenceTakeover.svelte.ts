@@ -19,8 +19,11 @@ export function isBusyElsewhere(e: unknown): { profileId: string; owner: string 
   if (i < 0) return null;
   const rest = m.slice(i + BUSY_PREFIX.length).trim();
   const bar = rest.indexOf("|");
-  if (bar < 0) return { profileId: "", owner: rest };
-  return { profileId: rest.slice(0, bar), owner: rest.slice(bar + 1) };
+  // A wrapped error can go on after the owner ("... |pc-1 (direct dial
+  // failed too: ...)"): the owner is a host name, it ends at " (".
+  const ownerOf = (s: string) => { const p = s.indexOf(" ("); return (p >= 0 ? s.slice(0, p) : s).trim(); };
+  if (bar < 0) return { profileId: "", owner: ownerOf(rest) };
+  return { profileId: rest.slice(0, bar), owner: ownerOf(rest.slice(bar + 1)) };
 }
 
 type Phase = "idle" | "asking" | "requesting" | "freed" | "timeout";

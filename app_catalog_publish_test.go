@@ -480,7 +480,7 @@ func TestCatalogPublishRefusedAfterSlotMove(t *testing.T) {
 	in := pa.in()
 	pa.setMode("refuse")
 	res, err := pa.a.CatalogPublish(in)
-	if err != nil || res.Published || !strings.Contains(res.Message, "1 slot(s) moved to the whole catalog before the publish stay there") || strings.Contains(res.Message, "nothing changed here") {
+	if err != nil || res.Published || !strings.Contains(res.Message, "1 placeholder(s) moved to all spaces before the publish stay there") || strings.Contains(res.Message, "nothing changed here") {
 		t.Fatalf("result: %+v %v", res, err)
 	}
 	slots, _ := db.ListCatalogSlots(pa.cat.ID)

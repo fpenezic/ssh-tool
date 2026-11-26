@@ -67,7 +67,7 @@
         <h2>Copy "{catalogLocal.copy.name}" to my connections</h2>
         <button class="close" onclick={() => (catalogLocal.copy = null)} title="Cancel (Esc)" disabled={busy}><IconX size={14} /></button>
       </header>
-      <p class="hint">A copy of your own: it will not follow the catalog. Changes there do not reach it, and yours do not reach the catalog. Slots you have not bound come over empty and are noted on each connection.</p>
+      <p class="hint">A copy of your own: it will not follow the catalog. Changes there do not reach it, and yours do not reach the catalog. Placeholders you have not bound come over empty and are noted on each connection.</p>
       <span class="label">Into</span>
       <SearchableSelect value={target} options={targets} placeholder="Pick a folder..." emptyLabel="(top level)" onChange={(v: string) => (target = v)} />
       {#if err}<p class="err"><IconAlertTriangle size={13} /> {err}</p>{/if}
@@ -109,7 +109,7 @@
       </header>
       <p class="hint">{r.connections} connection{r.connections === 1 ? "" : "s"}, {r.folders} folder{r.folders === 1 ? "" : "s"}, {r.forwards} forward{r.forwards === 1 ? "" : "s"}{r.credentials ? `, ${r.credentials} credential${r.credentials === 1 ? "" : "s"} made your own` : ""}.</p>
       {#if r.emptied.length}
-        <p class="hint">Left empty: these named a catalog slot you had not bound. Set your own before you connect.</p>
+        <p class="hint">Left empty: these named a catalog placeholder you had not bound. Set your own before you connect.</p>
         <div class="list">
           {#each r.emptied as e, i (i)}
             <button class="item" onclick={() => open(e.kind, e.id)}>

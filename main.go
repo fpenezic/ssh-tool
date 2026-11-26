@@ -103,9 +103,10 @@ func main() {
 			fileWriter = openLogFile(filepath.Join(logDir, "app.log"))
 		}
 	}
-	stamp := log.New(io.MultiWriter(os.Stderr, fileWriter), "", log.LstdFlags|log.Lmicroseconds)
-	_ = stamp // currently we just route the standard `log` to the same sink
-	logBuf := newLogBuffer(io.MultiWriter(os.Stderr, fileWriter))
+	// logTee, not io.MultiWriter: a Windows GUI build has no valid
+	// stderr, every write to it fails, and MultiWriter stops at the first
+	// failing writer, so the file got nothing.
+	logBuf := newLogBuffer(logTee{os.Stderr, fileWriter})
 	log.SetOutput(logBuf)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	log.Printf("=== %s %s (%s) start %s ===",
