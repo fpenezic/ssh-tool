@@ -92,6 +92,9 @@ type Manager struct {
 
 	mu     sync.Mutex
 	tokens map[string]tokenState // serverID -> cached access token
+	// alias: a server id not registered here (a credential from another
+	// machine) -> the registered server that answered it last.
+	alias map[string]string
 }
 
 // NewManager wires the manager with a direct-dial client factory. cacheDir holds
@@ -130,16 +133,23 @@ func (m *Manager) Resolve(ref store.InfisicalRef) (secret string, fresh Freshnes
 	if !m.secrets.Unlocked() {
 		return "", "", ErrVaultLocked
 	}
-	srv, err := m.store.GetInfisicalServer(ref.ServerID)
-	if err != nil {
-		return "", "", fmt.Errorf("infisical: server %s not found: %w", ref.ServerID, err)
-	}
 	path := ref.SecretPath
 	if path == "" {
 		path = "/"
 	}
-
-	val, ferr := m.fetchSecret(*srv, ref.ProjectID, ref.Environment, path, ref.Key)
+	var val string
+	var ferr error
+	srv, err := m.store.GetInfisicalServer(ref.ServerID)
+	if err != nil {
+		// Server registrations are per machine and do not travel with
+		// profile sync, but credentials do: a credential made on another
+		// machine names that machine's server id. Ask the servers
+		// registered here; the credential is not rewritten (that would
+		// break it on the machine it came from).
+		srv, val, ferr = m.fetchFromAnyServer(ref, path)
+	} else {
+		val, ferr = m.fetchSecret(*srv, ref.ProjectID, ref.Environment, path, ref.Key)
+	}
 	if ferr != nil {
 		if cached, cerr := m.readCache(ref); cerr == nil {
 			return cached, FreshStale, nil
@@ -150,6 +160,45 @@ func (m *Manager) Resolve(ref store.InfisicalRef) (secret string, fresh Freshnes
 	_ = m.writeCache(ref, val)
 	_ = m.store.TouchInfisicalUsed(srv.ID, time.Now().Unix())
 	return val, FreshFetched, nil
+}
+
+// fetchFromAnyServer reads a reference whose server id is not registered
+// on this machine from the registered servers: the one that answered it
+// last first, then the rest in list order; the first that returns the
+// secret wins and is remembered.
+func (m *Manager) fetchFromAnyServer(ref store.InfisicalRef, path string) (*store.InfisicalServer, string, error) {
+	servers, err := m.store.ListInfisicalServers()
+	if err != nil {
+		return nil, "", err
+	}
+	if len(servers) == 0 {
+		return nil, "", errors.New("infisical: no Infisical server is registered on this machine (Settings - External secrets)")
+	}
+	m.mu.Lock()
+	prev := m.alias[ref.ServerID]
+	m.mu.Unlock()
+	for i, s := range servers {
+		if s.ID == prev && i > 0 {
+			servers[0], servers[i] = servers[i], servers[0]
+			break
+		}
+	}
+	var lastErr error
+	for i := range servers {
+		val, err := m.fetchSecret(servers[i], ref.ProjectID, ref.Environment, path, ref.Key)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		m.mu.Lock()
+		if m.alias == nil {
+			m.alias = map[string]string{}
+		}
+		m.alias[ref.ServerID] = servers[i].ID
+		m.mu.Unlock()
+		return &servers[i], val, nil
+	}
+	return nil, "", fmt.Errorf("infisical: the secret's server is not registered on this machine, and no registered server returned it: %w", lastErr)
 }
 
 // TestLogin verifies a server's API key logs in (used by the Settings button).

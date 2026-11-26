@@ -79,6 +79,9 @@ func Open(raw, keyFile []byte, master string) (*DB, error) {
 	return &DB{db: database}, nil
 }
 
+// Has reports whether the database holds an entry.
+func (d *DB) Has(entryUUID string) bool { return d.findEntry(entryUUID) != nil }
+
 // Resolve looks up an entry by UUID and returns the requested field's secret.
 // field == FieldPassword returns the entry's Password. Any other field is tried
 // as a String value first, then as an attachment (binary) key.

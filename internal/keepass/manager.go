@@ -137,12 +137,18 @@ func (m *Manager) Resolve(ref store.KeepassRef) (secret string, fresh Freshness,
 	if !m.secrets.Unlocked() {
 		return "", "", ErrVaultLocked
 	}
+	var st *openState
 	kdb, err := m.store.GetKeepassDatabase(ref.DBID)
 	if err != nil {
-		return "", "", fmt.Errorf("keepass: database %s not found: %w", ref.DBID, err)
-	}
-	st, err := m.ensureOpen(*kdb, false)
-	if err != nil {
+		// Database registrations are per machine and do not travel with
+		// profile sync, but credentials do: a credential made on another
+		// machine names that machine's database id. Use the registered
+		// database here that holds the entry (entry UUIDs survive copies
+		// of the .kdbx); the credential is not rewritten.
+		if st, err = m.databaseHolding(ref.EntryUUID); err != nil {
+			return "", "", err
+		}
+	} else if st, err = m.ensureOpen(*kdb, false); err != nil {
 		return "", "", err
 	}
 	sec, err := st.db.Resolve(ref.EntryUUID, ref.Field)
@@ -150,6 +156,34 @@ func (m *Manager) Resolve(ref store.KeepassRef) (secret string, fresh Freshness,
 		return "", st.fresh, err
 	}
 	return sec, st.fresh, nil
+}
+
+// databaseHolding opens the registered databases in list order and
+// returns the first that holds an entry, for a reference whose database id
+// is not registered on this machine.
+func (m *Manager) databaseHolding(entryUUID string) (*openState, error) {
+	dbs, err := m.store.ListKeepassDatabases()
+	if err != nil {
+		return nil, err
+	}
+	if len(dbs) == 0 {
+		return nil, errors.New("keepass: no KeePass database is registered on this machine (Settings - External secrets)")
+	}
+	var lastErr error
+	for i := range dbs {
+		st, err := m.ensureOpen(dbs[i], false)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if st.db.Has(entryUUID) {
+			return st, nil
+		}
+	}
+	if lastErr != nil {
+		return nil, fmt.Errorf("keepass: the entry's database is not registered on this machine and a registered one could not be opened: %w", lastErr)
+	}
+	return nil, fmt.Errorf("keepass: the entry's database is not registered on this machine, and no registered database holds it: %w", ErrEntryNotFound)
 }
 
 // Refresh forces a re-fetch + re-open of one database, ignoring staleness.
