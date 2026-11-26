@@ -176,7 +176,15 @@ func (m *Manager) Resolve(ref store.BitwardenRef) (secret string, fresh Freshnes
 	}
 	srv, err := m.store.GetBitwardenServer(ref.ServerID)
 	if err != nil {
-		return "", "", fmt.Errorf("bitwarden: server %s not found: %w", ref.ServerID, err)
+		// Server registrations are per machine and do not travel with
+		// profile sync, but credentials do: a credential made on another
+		// machine names that machine's server id. Use the registered
+		// server here that holds the item. The credential is not
+		// rewritten (that would break it on the machine it came from).
+		srv, err = m.serverHolding(ref.CipherID)
+		if err != nil {
+			return "", "", err
+		}
 	}
 	st, err := m.ensureOpen(*srv, false)
 	if err != nil {
@@ -187,6 +195,34 @@ func (m *Manager) Resolve(ref store.BitwardenRef) (secret string, fresh Freshnes
 		return "", st.fresh, err
 	}
 	return sec, st.fresh, nil
+}
+
+// serverHolding finds the registered server whose vault holds a cipher,
+// for a reference whose server id is not registered on this machine.
+// Several servers holding it: the first in list order.
+func (m *Manager) serverHolding(cipherID string) (*store.BitwardenServer, error) {
+	servers, err := m.store.ListBitwardenServers()
+	if err != nil {
+		return nil, err
+	}
+	if len(servers) == 0 {
+		return nil, errors.New("bitwarden: no Bitwarden / Vaultwarden server is registered on this machine (Settings - External secrets)")
+	}
+	var lastErr error
+	for i := range servers {
+		st, err := m.ensureOpen(servers[i], false)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if st.vault.findCipher(cipherID) != nil {
+			return &servers[i], nil
+		}
+	}
+	if lastErr != nil {
+		return nil, fmt.Errorf("bitwarden: the item's server is not registered on this machine and a registered one could not be read: %w", lastErr)
+	}
+	return nil, fmt.Errorf("bitwarden: the item's server is not registered on this machine, and no registered server holds it: %w", ErrCipherNotFound)
 }
 
 // Sync forces a re-login + re-sync of one server, ignoring staleness.
