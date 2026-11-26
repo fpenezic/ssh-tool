@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/url"
 	"runtime"
 	"sort"
@@ -836,8 +837,14 @@ func (a *App) refreshCatalogLinks(cat *store.Catalog, c *catalog.Client, base co
 	}
 	rt := a.catRT()
 	rt.mu.Lock()
+	prev, had := rt.links[cat.ID]
 	rt.links[cat.ID] = links
 	rt.mu.Unlock()
+	if (had && !maps.Equal(prev, links)) || (!had && len(links) > 0) {
+		// The open placeholder list reloads on this; a pass with no
+		// record changes emits nothing else.
+		EventsEmit("catalog_changed", map[string]any{"catalog_id": cat.ID})
+	}
 }
 
 // catalogSlotLink is the "open in the backend" link of an external slot.

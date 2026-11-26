@@ -13,6 +13,9 @@ func TestExternalLink(t *testing.T) {
 		"bitwarden": "https://vault.example.com/#/vault?itemId={cipher_id}",
 		"plain":     "http://vault.example.com/{id}",
 		"js":        "{id}",
+		"host":      "https://{id}",
+		"nohost":    "https:///items/{id}",
+		"user":      "https://{id}@vault.example.com/",
 		"two":       "https://x.example.com/p/{project_id}/s?k={key}",
 	}
 	cases := []struct {
@@ -26,6 +29,9 @@ func TestExternalLink(t *testing.T) {
 		{"no template", "infisical", `{"key":"k"}`, ""},
 		{"http refused", "plain", `{"id":"x"}`, ""},
 		{"scheme from the ref refused", "js", `{"id":"javascript:alert(1)"}`, ""},
+		{"no host", "nohost", `{"id":"x"}`, ""},
+		{"host filled", "host", `{"id":"vault.example.com"}`, "https://vault.example.com"},
+		{"userinfo refused", "user", `{"id":"me"}`, ""},
 		{"two fields", "two", `{"project_id":"p1","key":"K"}`, "https://x.example.com/p/p1/s?k=K"},
 		{"bad json", "bitwarden", `{`, ""},
 		{"empty ref", "bitwarden", ``, ""},
