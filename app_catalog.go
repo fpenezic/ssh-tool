@@ -583,6 +583,10 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 		// would ask every few minutes); the state says so, and Sync now
 		// offers the take-over.
 		a.setCatalogState(id, catStateVPN, a.catalogNetworkName(id)+" is in use on "+profileBusyOwner(err)+": Sync now to take it over")
+		// Look again soon, so a tunnel that comes up here or is freed
+		// there is used without waiting out the sync interval; each look
+		// is one presence read.
+		next = time.Now().Add(2 * time.Minute)
 	case errors.As(err, &ra):
 		next = time.Now().Add(ra.Wait)
 		a.setCatalogState(id, catStateError, catalogShortError(err))

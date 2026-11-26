@@ -174,6 +174,7 @@ func (m *Manager) Resolve(ref store.BitwardenRef) (secret string, fresh Freshnes
 	if !m.secrets.Unlocked() {
 		return "", "", ErrVaultLocked
 	}
+	var st *openState
 	srv, err := m.store.GetBitwardenServer(ref.ServerID)
 	if err != nil {
 		// Server registrations are per machine and do not travel with
@@ -181,13 +182,12 @@ func (m *Manager) Resolve(ref store.BitwardenRef) (secret string, fresh Freshnes
 		// machine names that machine's server id. Use the registered
 		// server here that holds the item. The credential is not
 		// rewritten (that would break it on the machine it came from).
-		srv, err = m.serverHolding(ref.CipherID)
-		if err != nil {
+		// Its open state comes back too, so the freshness of that open
+		// (fetched, stale cache) reaches the caller.
+		if st, err = m.serverHolding(ref.CipherID); err != nil {
 			return "", "", err
 		}
-	}
-	st, err := m.ensureOpen(*srv, false)
-	if err != nil {
+	} else if st, err = m.ensureOpen(*srv, false); err != nil {
 		return "", "", err
 	}
 	sec, err := st.vault.Resolve(ref.CipherID, ref.Field)
@@ -200,7 +200,7 @@ func (m *Manager) Resolve(ref store.BitwardenRef) (secret string, fresh Freshnes
 // serverHolding finds the registered server whose vault holds a cipher,
 // for a reference whose server id is not registered on this machine.
 // Several servers holding it: the first in list order.
-func (m *Manager) serverHolding(cipherID string) (*store.BitwardenServer, error) {
+func (m *Manager) serverHolding(cipherID string) (*openState, error) {
 	servers, err := m.store.ListBitwardenServers()
 	if err != nil {
 		return nil, err
@@ -216,7 +216,7 @@ func (m *Manager) serverHolding(cipherID string) (*store.BitwardenServer, error)
 			continue
 		}
 		if st.vault.findCipher(cipherID) != nil {
-			return &servers[i], nil
+			return st, nil
 		}
 	}
 	if lastErr != nil {
