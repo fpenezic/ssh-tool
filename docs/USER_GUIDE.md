@@ -988,6 +988,8 @@ entry does).
 Decrypted databases live in memory only and are **wiped the moment the
 vault locks**, exactly like the vault's own secrets.
 
+**On several machines**: the databases you register stay on each machine (paths differ), while credentials travel with profile sync. A credential made on another machine uses the database registered here that holds its entry. A master password or key file that is not stored on this machine is reported as such, with a pointer to Settings > External secrets, not as a locked vault.
+
 ### Vaultwarden / Bitwarden servers
 
 ssh-tool can also read secrets straight out of a self-hosted
@@ -1035,6 +1037,8 @@ moment the vault locks.
 Sign-in is API-key only (no email/password or interactive 2FA login),
 and the server needs a certificate your OS trusts.
 
+**On several machines**: server registrations stay on each machine, while credentials travel with profile sync. A credential made on another machine uses the server registered here that holds its item, even when that server was registered separately. A master password that is not stored on this machine is reported as such, not as a locked vault.
+
 ### Infisical servers
 
 ssh-tool can also read secrets straight out of an **Infisical** server.
@@ -1079,6 +1083,8 @@ memory and is dropped the moment the vault locks.
 
 Sign-in is Universal-Auth (API key) only, and the server needs a
 certificate your OS trusts.
+
+**On several machines**: server registrations stay on each machine, while credentials travel with profile sync. A credential made on another machine is read from the Infisical servers registered here; the first that returns the secret is used (and asked first next time). With no server reachable, the last value seen is used and marked stale, as above.
 
 ---
 
