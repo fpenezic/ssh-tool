@@ -1,0 +1,249 @@
+# The apt + dnf repository on GitHub Pages (gh-pages), built from published
+# GitHub Releases only - the exact bytes users download:
+#   - the last 5 stable ssh-tool releases;
+#   - when the repository variable CATALOG_RELEASES_REPO is set, the last 5
+#     stable ssh-tool-catalog releases from that public releases repository,
+#     each one only after its SHA256SUMS passes a keyless cosign check
+#     against CATALOG_SIGNER and the packages match it.
+#
+# The tree replaces gh-pages wholesale (apt and dnf metadata describe
+# exactly the files present), so every run collects both products: a run
+# for one of them keeps the other's packages.
+#
+# Triggers: after an ssh-tool release (workflow_call from release.yml), a
+# catalog release (repository_dispatch "catalog-release" from the catalog's
+# tag pipeline), and by hand.
+#
+# Variables: CATALOG_RELEASES_REPO (owner/name; unset = app packages only,
+# the gate until the catalog packages were installed on a real Debian /
+# Ubuntu and Fedora), CATALOG_SIGNER (certificate identity regexp of the
+# catalog's signing pipeline), PAGES_DOMAIN. Secret: REPO_GPG_KEY.
+
+name: repo
+
+on:
+  workflow_call:
+    secrets:
+      REPO_GPG_KEY:
+        required: false
+  repository_dispatch:
+    types: [catalog-release]
+  workflow_dispatch:
+
+# One rebuild at a time: an app release and a catalog release close
+# together must not race on the gh-pages push.
+concurrency:
+  group: pages-repo
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  repo:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check for the signing key
+        id: gate
+        env:
+          REPO_GPG_KEY: ${{ secrets.REPO_GPG_KEY }}
+        run: |
+          if [ -z "$REPO_GPG_KEY" ]; then
+            echo "REPO_GPG_KEY not set - skipping the apt/dnf repository." >&2
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install packaging tools
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils createrepo-c gnupg rpm
+
+      - name: Install cosign
+        if: steps.gate.outputs.enabled == 'true' && vars.CATALOG_RELEASES_REPO != ''
+        uses: sigstore/cosign-installer@v4
+
+      # The app's packages: the release this run follows is published by
+      # the time it runs (the publish job creates it, not as a draft), so
+      # its assets are the same bytes the build job made. The newest five
+      # stay resolvable (`apt install ssh-tool=<older>`); older ones stop
+      # being listed, their GitHub Releases still have them.
+      - name: Collect the app packages
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pkgs
+          gh release list -R "$GITHUB_REPOSITORY" --limit 40 --exclude-drafts --exclude-pre-releases \
+            --json tagName --jq '.[].tagName' | head -n 5 > /tmp/app-tags.txt
+          while read -r tag; do
+            [ -n "$tag" ] || continue
+            # A tag from before the packages shipped has none to download;
+            # that is expected, not an error.
+            gh release download "$tag" -R "$GITHUB_REPOSITORY" --dir /tmp/pkgs \
+              --pattern '*.deb' --pattern '*.rpm' 2>/dev/null \
+              || echo "ssh-tool: no packages on $tag - skipping" >&2
+          done < /tmp/app-tags.txt
+          # Never publish a repository without the app: an API hiccup that
+          # listed nothing would otherwise wipe gh-pages down to nothing.
+          if ! ls /tmp/pkgs/ssh-tool_*.deb >/dev/null 2>&1 || ! ls /tmp/pkgs/ssh-tool-*.rpm >/dev/null 2>&1; then
+            echo "no ssh-tool .deb / .rpm collected - not publishing" >&2
+            exit 1
+          fi
+          ls -la /tmp/pkgs
+
+      # The catalog's packages, gated by CATALOG_RELEASES_REPO. Everything
+      # collected here is signed with this repository's key below, so a
+      # release counts only when its SHA256SUMS carries a valid keyless
+      # cosign signature from the catalog's own tag pipeline
+      # (CATALOG_SIGNER, issuer gitlab.com) and the packages match it. A
+      # release that fails is skipped and logged, never fatal: the app's
+      # repository must not depend on it.
+      - name: Collect the catalog packages
+        if: steps.gate.outputs.enabled == 'true' && vars.CATALOG_RELEASES_REPO != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CATALOG_RELEASES_REPO: ${{ vars.CATALOG_RELEASES_REPO }}
+          CATALOG_SIGNER: ${{ vars.CATALOG_SIGNER }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CATALOG_SIGNER" ]; then
+            echo "CATALOG_SIGNER not set - catalog packages are not collected." >&2
+            exit 0
+          fi
+          gh release list -R "$CATALOG_RELEASES_REPO" --limit 40 --exclude-drafts --exclude-pre-releases \
+            --json tagName --jq '.[].tagName' | head -n 5 > /tmp/cat-tags.txt || true
+          while read -r tag; do
+            [ -n "$tag" ] || continue
+            d="/tmp/cat/$tag"
+            mkdir -p "$d"
+            if ! gh release download "$tag" -R "$CATALOG_RELEASES_REPO" --dir "$d" \
+                --pattern 'SHA256SUMS' --pattern 'SHA256SUMS.sig' --pattern 'SHA256SUMS.pem' \
+                --pattern '*.deb' --pattern '*.rpm' 2>/dev/null; then
+              echo "ssh-tool-catalog: $tag could not be downloaded - skipping" >&2
+              continue
+            fi
+            if ! (cd "$d" && cosign verify-blob \
+                  --signature SHA256SUMS.sig --certificate SHA256SUMS.pem \
+                  --certificate-oidc-issuer https://gitlab.com \
+                  --certificate-identity-regexp "$CATALOG_SIGNER" SHA256SUMS >/dev/null 2>&1); then
+              echo "ssh-tool-catalog: $tag SHA256SUMS signature did not verify - skipping" >&2
+              continue
+            fi
+            if ! (cd "$d" && sha256sum -c --ignore-missing --strict SHA256SUMS); then
+              echo "ssh-tool-catalog: $tag packages do not match SHA256SUMS - skipping" >&2
+              continue
+            fi
+            # Only packages SHA256SUMS lists (a file it does not name was
+            # not covered by the signature).
+            awk '{ n = $2; sub(/^\*/, "", n); print n }' "$d/SHA256SUMS" > "$d/.listed"
+            for f in "$d"/*.deb "$d"/*.rpm; do
+              [ -e "$f" ] || continue
+              if grep -qxF "$(basename "$f")" "$d/.listed"; then
+                cp "$f" /tmp/pkgs/
+              else
+                echo "ssh-tool-catalog: $tag $(basename "$f") is not in SHA256SUMS - left out" >&2
+              fi
+            done
+          done < /tmp/cat-tags.txt
+          ls -la /tmp/pkgs
+
+      - name: Import the signing key
+        if: steps.gate.outputs.enabled == 'true'
+        id: gpg
+        env:
+          REPO_GPG_KEY: ${{ secrets.REPO_GPG_KEY }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$REPO_GPG_KEY" | gpg --batch --import
+          keyid=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')
+          if [ -z "$keyid" ]; then
+            echo "no secret key found after import" >&2
+            exit 1
+          fi
+          echo "keyid=$keyid" >> "$GITHUB_OUTPUT"
+
+      - name: Build the repository
+        if: steps.gate.outputs.enabled == 'true'
+        run: ./scripts/build-repo.sh /tmp/pkgs /tmp/repo "${{ steps.gpg.outputs.keyid }}"
+
+      - name: Publish to GitHub Pages
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAGES_DOMAIN: ${{ vars.PAGES_DOMAIN }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref_name }}
+          DISPATCH_TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          set -euo pipefail
+          # What the commit says triggered it. The dispatch tag comes from
+          # outside: only a plain version-like value is used.
+          case "$EVENT" in
+            repository_dispatch)
+              if printf '%s' "$DISPATCH_TAG" | grep -qE '^[A-Za-z0-9._-]{1,64}$'; then
+                why="catalog ${DISPATCH_TAG}"
+              else
+                why="catalog release"
+              fi ;;
+            workflow_dispatch) why="manual rebuild" ;;
+            *) why="$REF" ;;
+          esac
+
+          # The repo tree replaces the branch wholesale rather than being
+          # merged into it: apt and dnf metadata describe exactly the set
+          # of files present, so a leftover package from a previous run
+          # would be listed by nothing and served forever.
+          rm -rf /tmp/pages
+          git clone --depth 1 --branch gh-pages \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            /tmp/pages 2>/dev/null || {
+              git init /tmp/pages
+              git -C /tmp/pages checkout -b gh-pages
+              git -C /tmp/pages remote add origin \
+                "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            }
+
+          # The identity has to be set on /tmp/pages, not on the checkout:
+          # `git config` without --global writes to the repository it is run
+          # in, and the commit below happens in the clone.
+          git -C /tmp/pages config user.name "github-actions[bot]"
+          git -C /tmp/pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          find /tmp/pages -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
+          cp -r /tmp/repo/. /tmp/pages/
+          # Jekyll processing off (it would eat metadata-only files).
+          touch /tmp/pages/.nojekyll
+          # CNAME is what makes Pages answer on the custom domain, and the
+          # wipe above deletes it: written here from PAGES_DOMAIN so the
+          # domain survives every publish. The page's REPO_URL placeholder
+          # takes the custom domain when set, the github.io URL otherwise.
+          if [ -n "${PAGES_DOMAIN}" ]; then
+            printf '%s\n' "${PAGES_DOMAIN}" > /tmp/pages/CNAME
+            url="${PAGES_DOMAIN}"
+          else
+            owner="${GITHUB_REPOSITORY%%/*}"
+            name="${GITHUB_REPOSITORY##*/}"
+            url="${owner}.github.io/${name}"
+          fi
+          sed "s|REPO_URL|${url}|g" "${GITHUB_WORKSPACE}/docs/repo-index.html" \
+            > /tmp/pages/index.html
+          # The catalog section only while the repository holds its
+          # packages: before the gate opens it would point at nothing.
+          if ! ls /tmp/repo/deb/pool/main/ssh-tool-catalog_*.deb >/dev/null 2>&1; then
+            sed -i '/<!--CATALOG-->/,/<!--\/CATALOG-->/d' /tmp/pages/index.html
+          fi
+
+          cd /tmp/pages
+          git add -A
+          if git diff --cached --quiet; then
+            echo "repository unchanged - nothing to publish"
+            exit 0
+          fi
+          git commit -m "repo: ${why}"
+          git push origin gh-pages

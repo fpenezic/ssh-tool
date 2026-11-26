@@ -12,6 +12,7 @@ while Wails v3 was a prerelease upstream.
 ### Shared catalogs
 - **"Slots" are now called placeholders**, in the app and on the catalog's web pages: a placeholder names what a connection needs (a credential, a network or a jump host), and each person binds it to their own; the catalog never holds the secret. Placeholders every space can use are listed under **All spaces**. Only the wording changed: existing bindings, catalogs and older apps are unaffected.
 - **Access to a single connection** (catalog servers from protocol revision 23): when a catalog manager gives you write access to one connection, you can edit it and its forwards for everyone, even inside a folder you only read or see as an outline. Moving or deleting it stays with the folder's writers.
+- Signing in to a catalog whose seats are all taken shows the server's message, as a refresh already did (catalog servers from revision 26 can refuse the sign-in itself).
 - **Open in Bitwarden** on a placeholder backed by a Bitwarden / Vaultwarden item, in Settings -> Catalogs and in the connect dialog, when the catalog's operator has set a link for it: the item opens in the team's web vault with your own account, for example to ask for access. Only https links open; a change of the link reaches the app on the next sync.
 
 ### Network profiles
