@@ -4,6 +4,7 @@
   import { onMount, tick, untrack } from "svelte";
   import { EventsOn } from "./wailsRuntime";
   import { errMsg } from "./connectErrors";
+  import { withTakeover } from "./connectionActions.svelte";
   import { desktopAlerts } from "./desktopAlerts.svelte";
   import { isMobile } from "./platform";
   import PasswordInput from "./PasswordInput.svelte";
@@ -2951,8 +2952,10 @@
   async function npTest(np: NetworkProfileInfo) {
     npTesting = { ...npTesting, [np.id]: true };
     try {
-      const st = await api.networkProfileTest(np.id);
-      toast.ok(st.running ? `Tunnel ${np.name} is up` : `Tunnel ${np.name} did not start`);
+      const out = await withTakeover(() => api.networkProfileTest(np.id));
+      if (!out.ok && out.cancelled) return;
+      if (!out.ok) throw out.error;
+      toast.ok(out.value.running ? `Tunnel ${np.name} is up` : `Tunnel ${np.name} did not start`);
       await networkProfiles.load(true);
     } catch (e: any) { toast.err(errMsg(e)); }
     finally {

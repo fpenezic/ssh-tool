@@ -117,6 +117,14 @@ export async function withTakeover<T>(attempt: () => Promise<T>): Promise<Takeov
   }
 }
 
+// syncCatalogWithTakeover: Sync now on a catalog whose VPN profile is up
+// on another machine offers the take-over (background passes never ask).
+// A declined take-over resolves quietly.
+export async function syncCatalogWithTakeover(id: string): Promise<void> {
+  const res = await withTakeover(() => api.catalogSyncNow(id));
+  if (!res.ok && !res.cancelled) throw res.error;
+}
+
 // FolderPicker modal state
 interface MoveTarget {
   connIds: string[];

@@ -53,7 +53,7 @@
     { id: "vnc", label: "VNC settings" },
     { id: "startup", label: "Initial command and environment variables", hint: "connections that rely on it may not work for others" },
     { id: "terminal", label: "Terminal and behaviour", hint: "colour tag, terminal type, keepalive, auto-reconnect, verbose, liveness probe" },
-    { id: "shared_creds", label: "Vaultwarden / Bitwarden items and opkssh, as slots", hint: "each colleague with access to the same item uses it; untick for private items (or untick one credential under Slots). Credentials from your own vault and network (VPN) profiles are never sent: colleagues set their own under My settings" },
+    { id: "shared_creds", label: "Vaultwarden / Bitwarden items and opkssh, as placeholders", hint: "each colleague with access to the same item uses it; untick for private items (or untick one credential under Placeholders). Credentials from your own vault and network (VPN) profiles are never sent: colleagues set their own under My settings" },
   ];
   // Not a settings category: the credential choice handled on its own.
   const credChoice = new Set(["shared_creds"]);
@@ -194,7 +194,7 @@
     notes: "Notes", tags: "Tags", initial_command: "Initial command", env_vars: "Environment variables",
     ssh_options: "SSH options", kafka_bootstrap: "Kafka bootstrap", db_addr: "Database address", db_name: "Database name",
     db_label: "Database label", description: "Description", remote_host: "Remote host", "jump_host.hostname": "Jump host",
-    name: "Slot name", username: "Username", auth_ref: "Credential", jump_host: "Jump host", network_profile_id: "Network",
+    name: "Placeholder name", username: "Username", auth_ref: "Credential", jump_host: "Jump host", network_profile_id: "Network",
   };
   const fieldName = (f: string) => fieldNames[f] ?? (f.startsWith("db_targets.") ? "Database target" : f);
 
@@ -276,7 +276,7 @@
         {:else}
           <p><IconFolder size={12} /> "{folderName}" moves into {targetPath || "the catalog"} in your tree. Same connections and settings, same behaviour; they become catalog records that everyone with access to that folder sees.</p>
         {/if}
-        <p><IconLock size={12} /> Stored passwords, keys and tokens are never sent. Each colleague binds the slots below to their own.</p>
+        <p><IconLock size={12} /> Stored passwords, keys and tokens are never sent. Each colleague binds the placeholders below to their own.</p>
         {#if oldApps.length > 0}
           {#each oldApps as o (o.device)}
             <p class="warn-text"><IconAlertTriangle size={12} /> {o.device} ran ssh-tool {o.version}, last seen {daysAgo(o.last_seen)} - it will stop showing this folder until it is updated.</p>
@@ -326,7 +326,7 @@
 
           <section>
             <h3>What to send <span class="dim">ticked goes to the catalog; the rest stays yours only, your tree does not change</span></h3>
-            <p class="dim always">Always sent: names, addresses, protocol, port, SSH options, tunnel settings, "sensitive" and fixed jump hosts (as slots or a copy, below).</p>
+            <p class="dim always">Always sent: names, addresses, protocol, port, SSH options, tunnel settings, "sensitive" and fixed jump hosts (as placeholders or a copy, below).</p>
             <div class="send">
               {#each sendCategories as c (c.id)}
                 <label class="send-item">
@@ -340,10 +340,10 @@
 
           {#if plan.slots.length > 0}
             <section>
-              <h3>Slots <span class="dim">placeholders each reader binds to their own; yours are bound to what you use today</span></h3>
+              <h3>Placeholders <span class="dim">each reader binds them to their own; yours are bound to what you use today</span></h3>
               {#if plan.catalog_slots && (plan.slots.some((x) => x.new) || slotsAtCatalogPick !== null)}
-                <label class="dim slot-opt" title="A slot for the whole catalog can be used by every space; colleagues bind it once. Only admins can make or change one.">
-                  <input type="checkbox" checked={slotsAtCatalog} disabled={busy} onchange={(e) => (slotsAtCatalogPick = (e.currentTarget as HTMLInputElement).checked)} /> New slots for the whole catalog, not only this space
+                <label class="dim slot-opt" title="A placeholder for all spaces can be used by every space; colleagues bind it once. Only admins can make or change one.">
+                  <input type="checkbox" checked={slotsAtCatalog} disabled={busy} onchange={(e) => (slotsAtCatalogPick = (e.currentTarget as HTMLInputElement).checked)} /> New placeholders for all spaces, not only this space
                 </label>
               {/if}
               {#each plan.slots as s (s.key)}
@@ -351,13 +351,13 @@
                   {#if s.type === "cred"}<IconKey size={13} />{:else if s.type === "net"}<IconVpn size={13} />{:else}<IconBastion size={13} />{/if}
                   {#if s.new}
                     <input class="slot-name" value={slotNames[s.key] ?? s.name} oninput={(e) => (slotNames = { ...slotNames, [s.key]: (e.currentTarget as HTMLInputElement).value })} title="The name colleagues see. Do not put customer details or secrets here." />
-                    <span class="tag">new{s.catalog_level ? ", whole catalog" : ""}</span>
+                    <span class="tag">new{s.catalog_level ? ", all spaces" : ""}</span>
                   {:else}
                     <strong>{s.name}</strong>
-                    <span class="tag reused-tag">{s.move_to_catalog ? `moves from ${s.reused_from} to the whole catalog` : `reused from ${s.reused_from || "the catalog"}`}</span>
+                    <span class="tag reused-tag">{s.move_to_catalog ? `moves from ${s.reused_from} to all spaces` : `reused from ${s.reused_from || "the catalog"}`}</span>
                   {/if}
                   {#if s.move_to_catalog || noSlotMove[s.key]}
-                    <label class="dim" title="The slot already exists in another space and is bound to the same thing here. Moving it to the whole catalog lets this space use it too; everyone who bound it keeps their binding.">
+                    <label class="dim" title="The placeholder already exists in another space and is bound to the same thing here. Moving it to all spaces lets this space use it too; everyone who bound it keeps their binding.">
                       <input type="checkbox" checked={!noSlotMove[s.key]} disabled={busy} onchange={(e) => (noSlotMove = { ...noSlotMove, [s.key]: !(e.currentTarget as HTMLInputElement).checked })} /> reuse
                     </label>
                   {/if}

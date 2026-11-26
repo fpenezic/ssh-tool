@@ -133,7 +133,7 @@
   }
 
   const whereLabel: Record<string, string> = {
-    slot: "binds the slot for the whole catalog",
+    slot: "binds the placeholder for all spaces",
     folder: "on the catalog folder, for all its connections",
     connection: "My settings",
     record: "the catalog has none",
@@ -207,7 +207,7 @@
 
       {#if slotLines.length > 0}
         <div class="slots">
-          <span class="label">Slots bound for the whole catalog</span>
+          <span class="label">Placeholders bound for all spaces</span>
           <div class="chips">{#each slotLines as c}<span class="chip slot">{chip(c)}</span>{/each}</div>
         </div>
       {/if}

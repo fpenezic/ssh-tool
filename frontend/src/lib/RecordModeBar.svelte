@@ -81,9 +81,9 @@
 
   {#if needSlots.length > 0}
     <div class="rm-box">
-      <p><strong>New slot{needSlots.length === 1 ? "" : "s"} {slotsOnFolder ? `on the folder "${slotsOnFolder}"` : "for this record"}</strong> <span class="dim">placeholders each colleague binds to their own; yours is bound to what you picked. The name is what they see.</span></p>
+      <p><strong>New placeholder{needSlots.length === 1 ? "" : "s"} {slotsOnFolder ? `on the folder "${slotsOnFolder}"` : "for this record"}</strong> <span class="dim">each colleague binds them to their own; yours is bound to what you picked. The name is what they see.</span></p>
       {#each needSlots as s (s.key)}
-        <label class="rm-slot">{s.type === "cred" ? "Credential" : s.type === "net" ? "Network" : "Bastion"} for your "{s.bind_name}"
+        <label class="rm-slot">{s.type === "cred" ? "Credential" : s.type === "net" ? "Network" : "Jump host"} for your "{s.bind_name}"
           <input value={slotNames[s.key] ?? s.name} oninput={(e) => (slotNames = { ...slotNames, [s.key]: (e.currentTarget as HTMLInputElement).value })} />
         </label>
       {/each}

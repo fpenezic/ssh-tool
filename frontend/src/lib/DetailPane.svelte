@@ -658,7 +658,7 @@
   // A catalog folder's credential may be a slot marker: shown by the
   // slot's name, like on a connection.
   const folderCredOptions = $derived([
-    ...(parseMarker(editingFolder?.authRef) ? [{ value: editingFolder!.authRef, label: catalogs.markerLabel(editingFolder!.authRef) ?? "catalog slot" }] : []),
+    ...(parseMarker(editingFolder?.authRef) ? [{ value: editingFolder!.authRef, label: catalogs.markerLabel(editingFolder!.authRef) ?? "catalog placeholder" }] : []),
     ...sshCredOptions(editingFolder?.authRef).filter((o) => !parseMarker(o.value)),
   ]);
 
@@ -1350,14 +1350,14 @@
   async function bindSlotFromEditor(catalogId: string, uuid: string, target: string) {
     if (!target) return;
     if (slotBinding) {
-      toast.info("The slot is still being bound; pick again when it is done");
+      toast.info("The placeholder is still being bound; pick again when it is done");
       return;
     }
     slotBinding = true;
     try {
       await api.catalogBind(catalogId, uuid, target);
       await Promise.all([tree.load(), catalogs.load(), catalogs.loadSlots(catalogId)]);
-      toast.ok("Slot bound");
+      toast.ok("Bound");
     } catch (e) {
       toast.err("Bind: " + errMsg(e), 8000);
     } finally {
@@ -1367,7 +1367,7 @@
 
   const credOptions = $derived([
     { value: AUTH_NONE, label: "None - do not inherit, ask at connect" },
-    ...(parseMarker(editing?.authRef) ? [{ value: editing!.authRef, label: catalogs.markerLabel(editing!.authRef) ?? "catalog slot" }] : []),
+    ...(parseMarker(editing?.authRef) ? [{ value: editing!.authRef, label: catalogs.markerLabel(editing!.authRef) ?? "catalog placeholder" }] : []),
     ...sshCredOptions(editing?.authRef).filter((o) => !parseMarker(o.value)),
   ]);
 
@@ -2138,11 +2138,11 @@
     {@const slotInfo = catalogs.slots[m.catalogId]?.find((x) => x.uuid === m.uuid)}
     <div class="slot-inline">
       {#if m.unbound && slotInfo}
-        <span class="inh-hint">Catalog slot <strong>"{slotInfo.name}"</strong> is not bound. Bind it once for every connection that uses it ({slotInfo.used_by}):</span>
+        <span class="inh-hint">Catalog placeholder <strong>"{slotInfo.name}"</strong> is not bound. Bind it once for every connection that uses it ({slotInfo.used_by}):</span>
         <SearchableSelect value="" options={slotBindOptions} placeholder="Pick a credential..." emptyLabel="(not bound)"
           onChange={(v: string) => bindSlotFromEditor(m.catalogId, m.uuid, v)} />
       {/if}
-      <button type="button" class="linklike bind-link" onclick={() => catalogs.open(m.catalogId, "slots", m.uuid)}>slot in Settings</button>
+      <button type="button" class="linklike bind-link" onclick={() => catalogs.open(m.catalogId, "slots", m.uuid)}>placeholder in Settings</button>
     </div>
   {/if}
 {/snippet}
@@ -2200,9 +2200,9 @@
       <div class="ed-title"><h1><IconUsers size={18} /> <span class="ed-name">{folder.name}</span></h1></div>
       <div class="head-actions"><button onclick={() => catalogs.open(folder.catalog_id)}>Catalog settings</button></div>
     </header>
-    <p class="hint">A shared catalog{cat?.account_name ? `, signed in as ${cat.account_name}` : ""}. Its connections stay in step with the catalog server; bind its slots once to use them.</p>
+    <p class="hint">A shared catalog{cat?.account_name ? `, signed in as ${cat.account_name}` : ""}. Its connections stay in step with the catalog server; bind its placeholders once to use them.</p>
     {#if cat && cat.unbound > 0}
-      <p><button class="primary" onclick={() => catalogs.open(cat.id, "slots")}>Bind {cat.unbound} slot{cat.unbound === 1 ? "" : "s"}</button></p>
+      <p><button class="primary" onclick={() => catalogs.open(cat.id, "slots")}>Bind {cat.unbound} placeholder{cat.unbound === 1 ? "" : "s"}</button></p>
     {/if}
   {:else if folder && folder.catalog_skeleton}
     <header class="ed-head">

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { catalogStateLabel, parseMarker, parseSshToolLink } from "./catalogMarks";
+import { catalogStateLabel, externalBackendLabel, parseMarker, parseSshToolLink } from "./catalogMarks";
 import type { CatalogInfo } from "./api";
 
 const cat = (over: Partial<CatalogInfo>): CatalogInfo => ({
@@ -30,7 +30,7 @@ describe("catalogStateLabel", () => {
   });
   it("leads to unbound slots, and says nothing when all is well", () => {
     const l = catalogStateLabel(cat({ unbound: 2 }));
-    expect(l.text).toBe("2 slots to bind");
+    expect(l.text).toBe("2 to bind");
     expect(l.action).toBe("slots");
     expect(catalogStateLabel(cat({})).text).toBe("");
   });
@@ -62,5 +62,15 @@ describe("parseSshToolLink", () => {
     expect(parseSshToolLink("https://example.com")).toBeNull();
     expect(parseSshToolLink("ssh-tool://catalog/add?url=https%3A%2F%2Fa.example.com")).toBeNull();
     expect(parseSshToolLink("ssh-tool://other")).toBeNull();
+  });
+});
+
+describe("externalBackendLabel", () => {
+  it("names the known backends and falls back to the raw name", () => {
+    expect(externalBackendLabel("bitwarden")).toBe("Bitwarden");
+    expect(externalBackendLabel("Infisical")).toBe("Infisical");
+    expect(externalBackendLabel("hashivault")).toBe("hashivault");
+    expect(externalBackendLabel("")).toBe("the vault");
+    expect(externalBackendLabel(undefined)).toBe("the vault");
   });
 });

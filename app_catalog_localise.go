@@ -52,6 +52,7 @@ func (a *App) forgetCatalog(id string) {
 	delete(rt.clients, id)
 	delete(rt.state, id)
 	delete(rt.next, id)
+	delete(rt.links, id)
 	rt.mu.Unlock()
 	if _, err := catalog.PruneImages(a.db); err != nil {
 		log.Printf("catalog: prune images: %v", err)

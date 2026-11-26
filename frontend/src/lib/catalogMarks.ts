@@ -2,6 +2,14 @@
 import type { CatalogInfo } from "./api";
 import { isMobile } from "./platform";
 
+const backendNames: Record<string, string> = { bitwarden: "Bitwarden", infisical: "Infisical" };
+
+// The name of an external placeholder's secret backend, as a button says it.
+export function externalBackendLabel(backend: string | undefined): string {
+  const b = (backend ?? "").trim();
+  return backendNames[b.toLowerCase()] ?? (b || "the vault");
+}
+
 // Short copy for a catalog's state on its root row. action names what
 // one click does there.
 export function catalogStateLabel(c: CatalogInfo): { text: string; tone: "ok" | "warn" | "err" | "busy"; action?: "signin" | "code" | "sync" | "unlock" | "slots" | "cancel" } {
@@ -28,7 +36,7 @@ export function catalogStateLabel(c: CatalogInfo): { text: string; tone: "ok" | 
       return { text: "waits for VPN", tone: "busy", action: "sync" };
   }
   if (c.unbound > 0) {
-    return { text: `${c.unbound} slot${c.unbound === 1 ? "" : "s"} to bind`, tone: "warn", action: "slots" };
+    return { text: `${c.unbound} to bind`, tone: "warn", action: "slots" };
   }
   return { text: "", tone: "ok" };
 }

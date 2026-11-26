@@ -20,6 +20,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -317,6 +318,30 @@ type RemoteOwner struct {
 // hasn't authorised a take-over. The frontend recognises this to show
 // the take-over dialog instead of a raw connect failure.
 const errProfileBusyPrefix = "network profile is active on another machine: "
+
+// profileBusyOwner is the machine named in a busy-elsewhere error
+// (anywhere in a wrapped chain), or "" when err is not one.
+func profileBusyOwner(err error) string {
+	if err == nil {
+		return ""
+	}
+	m := err.Error()
+	i := strings.Index(m, errProfileBusyPrefix)
+	if i < 0 {
+		return ""
+	}
+	rest := m[i+len(errProfileBusyPrefix):]
+	if j := strings.IndexByte(rest, '|'); j >= 0 {
+		rest = rest[j+1:]
+	}
+	if j := strings.Index(rest, " ("); j >= 0 {
+		rest = rest[:j]
+	}
+	if rest = strings.TrimSpace(rest); rest == "" {
+		return "another machine"
+	}
+	return rest
+}
 
 // presenceBlocksBringUp checks, for a profile about to come up,
 // whether another machine owns it and the user hasn't forced it. A

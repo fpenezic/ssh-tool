@@ -360,7 +360,7 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 		w, err := c.Patch(ctx, catalog.KindSlots, ps.UUID, ps.Rev, map[string]any{"folder_uuid": nil})
 		if err != nil {
 			cancel()
-			return &CatalogPublishResult{Message: "not published: moving the slot \"" + ps.Name + "\" to the whole catalog failed (" + strings.TrimRight(catalogShortError(err), ". ") + "). Nothing was created."}, nil
+			return &CatalogPublishResult{Message: "not published: moving the placeholder \"" + ps.Name + "\" to all spaces failed (" + strings.TrimRight(catalogShortError(err), ". ") + "). Nothing was created."}, nil
 		}
 		moved[ps.UUID] = true
 		// Only the slot row: its folder and revision change no reference,
@@ -372,7 +372,7 @@ func (a *App) CatalogPublish(in CatalogPublishInput) (*CatalogPublishResult, err
 	// What stays done when the publish below fails.
 	unchanged, movedNote := " Nothing was created and nothing changed here.", ""
 	if len(moved) > 0 {
-		movedNote = fmt.Sprintf(" %d slot(s) moved to the whole catalog before the publish stay there.", len(moved))
+		movedNote = fmt.Sprintf(" %d placeholder(s) moved to all spaces before the publish stay there.", len(moved))
 		unchanged = " Nothing was created." + movedNote
 	}
 	if err := a.db.RecordPublishPending(cat.ID, plan.Pending()); err != nil {
@@ -449,7 +449,7 @@ func mapPublishReports(plan *catalog.PublishPlan, reps []catalog.RecordReport) [
 		if rec, ok := byUUID[r.UUID]; ok {
 			p.LocalID, p.Name, p.Path = rec.LocalID, rec.Name, rec.Path
 		} else if n, ok := slotName[r.UUID]; ok {
-			p.Name = "slot " + n
+			p.Name = "placeholder " + n
 		}
 		out = append(out, p)
 	}

@@ -81,7 +81,7 @@ func TestCatalogMatchApplyAndUndo(t *testing.T) {
 	for _, c := range pv.Pairs[0].Changes {
 		where[c.Field] = c.Where
 	}
-	if where[`Slot "admin"`] != "slot" || where["User"] != "connection" || where["Notes"] != "record" || where["Saved password"] != "local" || where["Used in"] != "reference" {
+	if where[`Placeholder "admin"`] != "slot" || where["User"] != "connection" || where["Notes"] != "record" || where["Saved password"] != "local" || where["Used in"] != "reference" {
 		t.Fatalf("changes: %+v", pv.Pairs[0].Changes)
 	}
 

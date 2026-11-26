@@ -376,7 +376,7 @@ func (c *pubCtx) targetInherits() {
 			continue
 		}
 		if store.IsCatalogRef(fmt.Sprint(target[k])) {
-			c.plan.TargetInherits = append(c.plan.TargetInherits, k+": a catalog slot")
+			c.plan.TargetInherits = append(c.plan.TargetInherits, k+": a catalog placeholder")
 			continue
 		}
 		c.plan.TargetInherits = append(c.plan.TargetInherits, k+": "+display(target[k]))
@@ -481,8 +481,13 @@ type pubCtx struct {
 	// strict: a record-mode edit, where the writer chose each value; a
 	// reference that no longer exists is refused instead of kept local.
 	strict bool
-	opts   PublishOptions
-	plan   *PublishPlan
+	// editOnly: an edit of one existing record, whose own access the
+	// caller checked (a connection can be writable inside a folder the
+	// user only reads, catalog revision 23); the folder's access is not
+	// asked. Creating anything in the folder stays the server's to refuse.
+	editOnly bool
+	opts     PublishOptions
+	plan     *PublishPlan
 
 	folders  map[string]store.Folder
 	children map[string][]string // folder id -> child folder ids
@@ -773,7 +778,7 @@ func (c *pubCtx) target(cat *store.Catalog) error {
 	if !ok {
 		return fmt.Errorf("publish: the target folder is not in this catalog")
 	}
-	if t.Access != "write" && t.Access != "manage" {
+	if !c.editOnly && t.Access != "write" && t.Access != "manage" {
 		return fmt.Errorf("publish: you cannot add to %q in this catalog", t.Name)
 	}
 	c.plan.TargetLocalID = localOf[c.opts.TargetUUID]
@@ -1361,7 +1366,7 @@ func (c *pubCtx) hop(h map[string]any, kind, u, name string, folderLevel bool) (
 			if p, ok := c.passthrough[id]; ok {
 				if p.Slot {
 					if !c.inScope[p.UUID] {
-						c.refuse(kind, c.localOf(kind, u), name, "its jump host is a catalog slot that is not available in this folder")
+						c.refuse(kind, c.localOf(kind, u), name, "its jump host is a catalog placeholder that is not available in this folder")
 					}
 					h["jump_slot"] = p.UUID
 					delete(h, "connection_id")
@@ -1490,7 +1495,7 @@ func (c *pubCtx) ref(v, typ, kind, u, name, field string) string {
 	}
 	if p, ok := c.passthrough[v]; ok && p.Slot {
 		if !c.inScope[p.UUID] {
-			c.refuse(kind, c.localOf(kind, u), name, field+" names a catalog slot that is not available in this folder")
+			c.refuse(kind, c.localOf(kind, u), name, field+" names a catalog placeholder that is not available in this folder")
 			return ""
 		}
 		return p.UUID
@@ -1678,7 +1683,7 @@ func (c *pubCtx) slot(key, typ, target, kind, u, name, field string) string {
 		ps.Name = n
 	}
 	if ps.Name == "" {
-		ps.Name = typ + " slot"
+		ps.Name = typ + " placeholder"
 	}
 	folder := c.rootUUID
 	if c.catalogSlots() && c.opts.SlotsAtCatalog {

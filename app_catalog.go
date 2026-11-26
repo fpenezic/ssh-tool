@@ -56,6 +56,9 @@ type catalogRuntime struct {
 	state   map[string]catalogStatus
 	next    map[string]time.Time // earliest next background pass
 	signIn  map[string]*signInJob
+	// links: each catalog's external_links (GET /api/v1/config), read
+	// again on every successful pass; absent until the first one.
+	links map[string]map[string]string
 	// apply serialises catalog writes with a profile-sync pull (MirrorFrom
 	// replaces the same rows).
 	apply   sync.Mutex
@@ -103,6 +106,7 @@ func (a *App) catRT() *catalogRuntime {
 		a.catalogs.state = map[string]catalogStatus{}
 		a.catalogs.next = map[string]time.Time{}
 		a.catalogs.signIn = map[string]*signInJob{}
+		a.catalogs.links = map[string]map[string]string{}
 		a.catalogs.kick = make(chan struct{}, 1)
 	}
 	return &a.catalogs
@@ -545,6 +549,7 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 	rt.apply.Unlock()
 	if err == nil {
 		a.catalogImagesPass(cat, c, background)
+		a.refreshCatalogLinks(cat, c, base)
 	}
 	interval := time.Duration(cat.SyncIntervalSec) * time.Second
 	if interval < time.Minute {
@@ -571,6 +576,12 @@ func (a *App) catalogSyncNow(id string, background bool) error {
 		// sync stays what it was.
 		a.setCatalogState(id, catStateVPN, a.catalogWaitingVPNMsg(id))
 		next = time.Now().Add(time.Minute)
+	case background && profileBusyOwner(err) != "":
+		// The catalog's WireGuard profile is up on another machine of
+		// this user. A background pass never asks to take it over (it
+		// would ask every few minutes); the state says so, and Sync now
+		// offers the take-over.
+		a.setCatalogState(id, catStateVPN, a.catalogNetworkName(id)+" is in use on "+profileBusyOwner(err)+": Sync now to take it over")
 	case errors.As(err, &ra):
 		next = time.Now().Add(ra.Wait)
 		a.setCatalogState(id, catStateError, catalogShortError(err))
@@ -804,10 +815,45 @@ type CatalogSlotInfo struct {
 	// one that names it has the user's own value (My settings) in its
 	// place. Nothing to bind; binding would still serve new records.
 	Covered bool `json:"covered,omitempty"`
+	// OpenURL: the item in the backend's web vault, from the catalog's
+	// external_links (https only); "" when the catalog has no link for it.
+	OpenURL string `json:"open_url,omitempty"`
+}
+
+// refreshCatalogLinks reads the catalog's external_links after a pass. A
+// failed read keeps the links of the last one.
+func (a *App) refreshCatalogLinks(cat *store.Catalog, c *catalog.Client, base context.Context) {
+	ctx, cancel := context.WithTimeout(base, 20*time.Second)
+	defer cancel()
+	cfg, err := c.Config(ctx)
+	if err != nil {
+		log.Printf("catalog %s: reading its config: %v", cat.Name, err)
+		return
+	}
+	links := map[string]string{}
+	for k, v := range cfg.ExternalLinks {
+		links[strings.ToLower(k)] = v
+	}
+	rt := a.catRT()
+	rt.mu.Lock()
+	rt.links[cat.ID] = links
+	rt.mu.Unlock()
+}
+
+// catalogSlotLink is the "open in the backend" link of an external slot.
+func (a *App) catalogSlotLink(catalogID string, s store.CatalogSlot) string {
+	if s.Kind != "external" || s.Backend == "" {
+		return ""
+	}
+	rt := a.catRT()
+	rt.mu.Lock()
+	links := rt.links[catalogID]
+	rt.mu.Unlock()
+	return catalog.ExternalLink(links, s.Backend, s.ExternalRefJSON)
 }
 
 // catalogLevelName is where a catalog-level slot lives, as the app shows it.
-const catalogLevelName = "Whole catalog"
+const catalogLevelName = "All spaces"
 
 func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []CatalogSlotInfo {
 	bindings, _ := a.db.ListCatalogBindings(catalogID)
@@ -819,7 +865,7 @@ func (a *App) catalogSlotInfos(catalogID string, slots []store.CatalogSlot) []Ca
 	needed := a.catalogSlotsInUse(catalogID)
 	out := make([]CatalogSlotInfo, 0, len(slots))
 	for _, s := range slots {
-		info := CatalogSlotInfo{CatalogSlot: s, State: "unbound", Skipped: skipped[catalogID+"/"+s.UUID]}
+		info := CatalogSlotInfo{CatalogSlot: s, State: "unbound", Skipped: skipped[catalogID+"/"+s.UUID], OpenURL: a.catalogSlotLink(catalogID, s)}
 		if ok, lid := a.slotFolderWritable(catalogID, s.FolderUUID); lid != "" || s.FolderUUID == "" {
 			info.CanWrite = ok && runtime.GOOS != "android" && runtime.GOOS != "ios"
 			if s.FolderUUID == "" {
@@ -939,7 +985,7 @@ func (a *App) CatalogBind(catalogID, slotUUID, targetID string) error {
 		}
 	}
 	if slot == nil {
-		return fmt.Errorf("no such slot in this catalog")
+		return fmt.Errorf("no such placeholder in this catalog")
 	}
 	if _, ok := a.catalogTargetName(slot.Type, targetID); !ok {
 		return fmt.Errorf("nothing of that kind with id %q", targetID)
@@ -1060,7 +1106,7 @@ func (a *App) CatalogRecord(kind, id string) (*CatalogRecordInfo, error) {
 	}
 	info.Rev = recordRev(raw)
 	if fid, _, fraw, err := a.db.CatalogFolderOf(kind, id); err == nil {
-		info.CanWrite = state == "" && catalogWritable(fraw) && runtime.GOOS != "android" && runtime.GOOS != "ios"
+		info.CanWrite = state == "" && a.catalogRecordEditable(kind, id, fraw) && runtime.GOOS != "android" && runtime.GOOS != "ios"
 		if f, err := a.db.GetFolder(fid); err == nil {
 			info.FolderName = f.Name
 		}

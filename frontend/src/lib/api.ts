@@ -1391,6 +1391,8 @@ export interface CatalogSlotInfo {
   used_by: number;
   skipped?: boolean;
   covered?: boolean;
+  /** The item in its backend's web vault (catalog external_links, https only). */
+  open_url?: string;
 }
 
 // An unbound slot a connect needs (CatalogUnboundFor), in connect order.
@@ -1404,6 +1406,9 @@ export interface CatalogPendingSlot {
   doc_md: string;
   folder_name: string;
   connections: number;
+  /** An external slot's backend and its item in that backend's web vault. */
+  backend?: string;
+  open_url?: string;
 }
 
 export interface CatalogRecordInfo {

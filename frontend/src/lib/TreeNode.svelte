@@ -22,7 +22,7 @@
   import { contextMenu } from "./contextMenu.svelte.ts";
   import { publishModal } from "./publishModal.svelte.ts";
   import { exportModal } from "./exportModal.svelte.ts";
-  import { connectionActions } from "./connectionActions.svelte";
+  import { connectionActions, withTakeover, syncCatalogWithTakeover } from "./connectionActions.svelte";
   import { tunnels } from "./tunnels.svelte.ts";
   import { dynEditor } from "./dynEditor.svelte";
   import { showConfirm } from "./confirmModal.svelte.ts";
@@ -68,7 +68,7 @@
       case "signin": api.catalogSignIn(id).catch(fail("Sign in")); break;
       case "code": catalogs.startEnroll(catRoot.base_url, ""); break;
       case "cancel": api.catalogCancelSignIn(id).catch(() => {}); break;
-      case "sync": api.catalogSyncNow(id).catch(fail("Sync")); break;
+      case "sync": syncCatalogWithTakeover(id).catch(fail("Sync")); break;
       case "unlock": view.setTab("credentials"); break;
       case "slots": catalogs.open(id, "slots"); break;
     }
@@ -130,7 +130,12 @@
     }
     const untrack = connectionActions.trackConnect("dyn:" + entry.id);
     try {
-      const res = await api.sshConnectDynamic(folderId, entry.id);
+      // The folder's network profile live on another machine: offer the
+      // take-over instead of a plain "not reachable".
+      const out = await withTakeover(() => api.sshConnectDynamic(folderId, entry.id));
+      if (!out.ok && out.cancelled) return;
+      if (!out.ok) throw out.error;
+      const res = out.value;
       sessions.add({
         sessionId: res.session_id,
         connectionId: "dyn:" + entry.id,
@@ -617,7 +622,7 @@
         ...(catRoot && !isMobile && (catRoot.state === "no_login" || catRoot.state === "signed_out")
           ? [{ label: "Sign in", iconComponent: IconKey, onSelect: () => { api.catalogSignIn(catRoot!.id).catch((err) => toast.err("Sign in: " + errMsg(err), 8000)); } }] : []),
         ...(catRoot && catRoot.state !== "no_login" && catRoot.state !== "signed_out" && catRoot.state !== "locked"
-          ? [{ label: "Sync now", iconComponent: IconRefresh, onSelect: () => { api.catalogSyncNow(catRoot!.id).catch((err) => toast.err("Sync: " + errMsg(err), 8000)); } }] : []),
+          ? [{ label: "Sync now", iconComponent: IconRefresh, onSelect: () => { syncCatalogWithTakeover(catRoot!.id).catch((err) => toast.err("Sync: " + errMsg(err), 8000)); } }] : []),
         ...(folder.remote_uuid && folder.catalog_state !== "removed" ? [{ label: "Copy to my connections…", iconComponent: IconCopy, onSelect: () => catalogLocal.startCopy("folders", folder.id, folder.name) }] : []),
         ...(folder.remote_uuid && folder.catalog_id ? [{ label: "Hide in my tree", iconComponent: IconEyeOff, onSelect: async () => {
           await catalogVisibility.set(folder.catalog_id!, folder.remote_uuid!, true);
@@ -625,7 +630,7 @@
           toast.push("info", `${folder.name} hidden from your tree - click to show hidden folders`, 8000, () => catalogs.open(folder.catalog_id!));
         } }] : []),
         ...(cat && folder.catalog_writable && !isMobile && folder.remote_uuid && folder.catalog_state !== "removed" ? catalogWriterItems(cat.id) : []),
-        ...(cat ? [{ label: "Slots…", iconComponent: IconKey, onSelect: () => catalogs.open(cat.id, "slots") },
+        ...(cat ? [{ label: "Placeholders…", iconComponent: IconKey, onSelect: () => catalogs.open(cat.id, "slots") },
           { label: "Catalog settings…", iconComponent: IconSettings, onSelect: () => catalogs.open(cat.id) }] : []),
       ]);
       return;
@@ -716,7 +721,7 @@
         api.catalogDelete("connections", one.id, false).then(() => tree.load()).catch((err) => toast.err("Delete: " + errMsg(err), 8000));
       } }] : []),
       ...(canDeleteForAll && one ? [{ label: "Duplicate in the catalog…", iconComponent: IconCopy, onSelect: async () => {
-        const name = (await showPrompt(`Duplicate "${one.name}" in the catalog (same settings, slots and forwards, for everyone with access): name`, one.name + " copy"))?.trim();
+        const name = (await showPrompt(`Duplicate "${one.name}" in the catalog (same settings, placeholders and forwards, for everyone with access): name`, one.name + " copy"))?.trim();
         if (!name) return;
         const hostname = (await showPrompt(`Hostname or IP address of "${name}"`, one.hostname))?.trim();
         if (!hostname) return;

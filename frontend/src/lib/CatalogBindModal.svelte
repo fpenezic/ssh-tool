@@ -11,7 +11,8 @@
   import { networkProfiles } from "./networkProfiles.svelte";
   import { renderMarkdown } from "./markdown";
   import { errMsg } from "./connectErrors";
-  import { IconKey, IconVpn, IconBastion, IconX, IconAlertTriangle, IconUsers } from "./iconMap";
+  import { IconKey, IconVpn, IconBastion, IconX, IconAlertTriangle, IconUsers, IconExternalLink } from "./iconMap";
+  import { externalBackendLabel } from "./catalogMarks";
 
   const slots = $derived(bindGate.pending?.slots ?? []);
   const key = (s: CatalogPendingSlot) => s.catalog_id + "/" + s.slot_uuid;
@@ -47,7 +48,7 @@
       .map((c) => ({ value: c.id, label: c.name + (c.hostname ? ` (${c.hostname})` : "") })),
   );
   const optionsFor = (s: CatalogPendingSlot) => (s.type === "cred" ? credOptions : s.type === "net" ? netOptions : jumpOptions);
-  const roleLabel = { jump: "Bastion", net: "Network profile", cred: "Credential", otp: "One-time code" } as const;
+  const roleLabel = { jump: "Jump host", net: "Network profile", cred: "Credential", otp: "One-time code" } as const;
   const noneYet = { cred: "You have no credentials yet.", net: "You have no network profiles yet.", jump: "You have no connections to use as a bastion yet." } as const;
 
   const ready = $derived(slots.length > 0 && slots.every((s) => skip[key(s)] || !!choice[key(s)]));
@@ -76,6 +77,13 @@
     bindGate.finish(false);
     view.setTab(tab);
   }
+  async function openExternal(url: string) {
+    try {
+      await api.openURL(url);
+    } catch (e) {
+      err = errMsg(e);
+    }
+  }
   function onDocClick(e: MouseEvent) {
     const a = (e.target as HTMLElement).closest("a");
     if (!a) return;
@@ -92,7 +100,7 @@
         <h2><IconUsers size={15} /> Choose your own for the catalog</h2>
         <button class="close" onclick={cancel} title="Cancel (Esc)" disabled={busy}><IconX size={14} /></button>
       </header>
-      <p class="hint">This connection comes from a catalog. It uses {slots.length === 1 ? "a slot" : "slots"} that each colleague fills with their own; pick yours once and every connection that uses {slots.length === 1 ? "it" : "them"} works.</p>
+      <p class="hint">This connection comes from a catalog. It uses {slots.length === 1 ? "a placeholder" : "placeholders"} that each colleague fills with their own; pick yours once and every connection that uses {slots.length === 1 ? "it" : "them"} works.</p>
 
       {#each slots as s (key(s))}
         <div class="row">
@@ -100,6 +108,9 @@
             <span class="icon">{#if s.role === "jump"}<IconBastion size={14} />{:else if s.role === "net"}<IconVpn size={14} />{:else}<IconKey size={14} />{/if}</span>
             <strong>{roleLabel[s.role]}</strong> <span class="name">"{s.name}"</span>
             <span class="dim">used by {s.connections} {s.connections === 1 ? "connection" : "connections"} in this catalog ({s.catalog_name}){#if s.folder_name}, defined on {s.folder_name}{/if}</span>
+            {#if s.open_url}
+              <button class="open-ext" onclick={() => openExternal(s.open_url!)} title={"Open this item in " + externalBackendLabel(s.backend) + " with your own account, for example to ask for access"}><IconExternalLink size={12} /> Open in {externalBackendLabel(s.backend)}</button>
+            {/if}
           </div>
           {#if s.doc_md}
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -141,6 +152,12 @@
   .row { display: flex; flex-direction: column; gap: 5px; border: 1px solid var(--surface0); border-radius: var(--r-md); padding: 6px 8px; }
   .row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: var(--fs-sm); }
   .icon { color: var(--peach); display: inline-flex; }
+  .open-ext {
+    margin-left: auto; background: var(--surface0); color: var(--text); border: 0; border-radius: var(--r-sm);
+    height: var(--ctl-h-sm); padding: 0 6px; font: inherit; font-size: var(--fs-sm); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .open-ext:hover { background: var(--surface1); }
   .name { font-family: var(--font-mono, monospace); }
   .doc { font-size: var(--fs-sm); color: var(--subtext1); border-left: 2px solid var(--surface1); padding-left: 8px; }
   .doc :global(p) { margin: 0.2em 0; }

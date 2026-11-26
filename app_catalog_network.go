@@ -152,11 +152,15 @@ func catalogNetworkWaiting(err error) bool {
 
 // catalogWaitingVPNMsg is what the catalog shows while it waits.
 func (a *App) catalogWaitingVPNMsg(catalogID string) string {
-	name := "its VPN"
+	return "waiting for " + a.catalogNetworkName(catalogID) + ": Sync now or a connection through it brings it up"
+}
+
+// catalogNetworkName names the catalog's network profile for a message.
+func (a *App) catalogNetworkName(catalogID string) string {
 	if row, err := a.db.GetNetworkProfile(a.catalogNetwork(catalogID)); err == nil && row != nil {
-		name = row.Name
+		return row.Name
 	}
-	return "waiting for " + name + ": Sync now or a connection through it brings it up"
+	return "its VPN"
 }
 
 // useCatalogNetwork puts a new (not yet saved) catalog's client on a

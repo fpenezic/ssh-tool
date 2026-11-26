@@ -8,7 +8,7 @@
   import { onMount } from "svelte";
   import { tree, sessions, selection, view } from "./stores.svelte";
   import { api, type Connection, type NetworkProfileInfo } from "./api";
-  import { connectionActions } from "./connectionActions.svelte";
+  import { connectionActions, withTakeover } from "./connectionActions.svelte";
   import { probeState } from "./probeState.svelte";
   import { workspaces } from "./workspaces.svelte";
   import { networkProfiles } from "./networkProfiles.svelte";
@@ -116,8 +116,10 @@
     try {
       if (np.status.running) await api.networkProfileStop(np.id);
       else {
-        const st = await api.networkProfileTest(np.id);
-        if (!st.running) toast.err(`Tunnel ${np.name} did not start`);
+        const out = await withTakeover(() => api.networkProfileTest(np.id));
+        if (!out.ok && out.cancelled) return;
+        if (!out.ok) throw out.error;
+        if (!out.value.running) toast.err(`Tunnel ${np.name} did not start`);
       }
       await networkProfiles.load(true);
     } catch (e) {

@@ -26,6 +26,19 @@ type rotatingFile struct {
 	bytes int64
 }
 
+// logTee writes each log line to every writer, whatever any of them
+// answers. io.MultiWriter stops at the first error, and on a Windows GUI
+// build (-H windowsgui) os.Stderr is not a valid handle: with stderr
+// first, nothing ever reached the log file.
+type logTee []io.Writer
+
+func (t logTee) Write(p []byte) (int, error) {
+	for _, w := range t {
+		_, _ = w.Write(p)
+	}
+	return len(p), nil
+}
+
 func openLogFile(path string) io.Writer {
 	r := &rotatingFile{path: path}
 	if err := r.open(); err != nil {
