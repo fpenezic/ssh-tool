@@ -1756,6 +1756,10 @@
   {/if}
 
   {#if mcpApprovalStore.pending}
+    <!-- Keyed per request: the next queued request gets a fresh dialog, so
+         focus starts on Deny again instead of staying on the button the
+         previous answer used (an Enter would approve it unseen). -->
+    {#key mcpApprovalStore.pending.approvalId}
     <McpApprovalModal
       sessionName={mcpApprovalStore.pending.sessionName}
       kind={mcpApprovalStore.pending.kind}
@@ -1768,9 +1772,11 @@
         await api.mcpApprovalRespond(a.approvalId, decision);
       }}
     />
+    {/key}
   {/if}
 
   {#if factsApproval}
+    {#key factsApproval.approval_id}
     <McpFactsApprovalModal
       req={factsApproval}
       onRespond={async (approve, ids) => {
@@ -1780,9 +1786,11 @@
         await api.mcpFactsApprovalRespond(r.approval_id, approve, ids);
       }}
     />
+    {/key}
   {/if}
 
   {#if planApproval}
+    {#key planApproval.approval_id}
     <McpPlanApprovalModal
       preview={planApproval}
       onRespond={async (decision) => {
@@ -1792,6 +1800,7 @@
         await api.mcpApprovalRespond(p.approval_id, decision);
       }}
     />
+    {/key}
   {/if}
 
   {#if shareApprovalStore.pending}

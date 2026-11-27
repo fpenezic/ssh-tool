@@ -2289,6 +2289,8 @@ Then, per session:
    The button turns blue while shared (red for YOLO). The LLM only ever
    sees sessions you have shared.
 
+   **Approval prompts** take the keyboard while they are open: **Deny** has the focus, so Enter never approves by accident, and **Escape** denies. Requests that queue up open one after another, each with Deny focused again; with several prompts open, Escape answers only the front one.
+
 What the LLM can do:
 
 - **read_terminal** - the recent scrollback. This is handed to the
