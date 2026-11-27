@@ -61,8 +61,12 @@ family.</p>
 <h2>Catalog server</h2>
 <p>The shared catalog server (<code>ssh-tool-catalog</code>) comes from
 the same repository: add it as above, then</p>
-<pre><code>sudo apt install ssh-tool-catalog   # Debian / Ubuntu
-sudo dnf install ssh-tool-catalog   # Fedora, RHEL, Rocky, Alma</code></pre>
+<!--CATALOG-DEB-->
+<pre><code>sudo apt install ssh-tool-catalog   # Debian / Ubuntu</code></pre>
+<!--/CATALOG-DEB-->
+<!--CATALOG-RPM-->
+<pre><code>sudo dnf install ssh-tool-catalog   # Fedora, RHEL, Rocky, Alma</code></pre>
+<!--/CATALOG-RPM-->
 <p class="note">The catalog server is a single static binary with no
 desktop dependencies, so unlike the app it also installs on RHEL and its
 rebuilds (use the Fedora repository file above), on amd64 and arm64.</p>

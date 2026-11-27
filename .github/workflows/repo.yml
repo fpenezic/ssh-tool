@@ -63,8 +63,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y apt-utils createrepo-c gnupg rpm
 
+      # Optional for the app: a failed install only means the catalog's
+      # packages are carried over from the current gh-pages below.
       - name: Install cosign
+        id: cosign
         if: steps.gate.outputs.enabled == 'true' && vars.CATALOG_RELEASES_REPO != ''
+        continue-on-error: true
         uses: sigstore/cosign-installer@v4
 
       # The app's packages: the release this run follows is published by
@@ -72,25 +76,47 @@ jobs:
       # its assets are the same bytes the build job made. The newest five
       # stay resolvable (`apt install ssh-tool=<older>`); older ones stop
       # being listed, their GitHub Releases still have them.
+      #
+      # Any failed request (after retries), a newest release without
+      # packages, or a release whose download comes back short stops the
+      # job: gh-pages then keeps what it has instead of losing a version.
       - name: Collect the app packages
         if: steps.gate.outputs.enabled == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          retry() { local n=0; until "$@"; do n=$((n + 1)); [ "$n" -ge 3 ] && return 1; sleep $((n * 5)); done; }
           mkdir -p /tmp/pkgs
-          gh release list -R "$GITHUB_REPOSITORY" --limit 40 --exclude-drafts --exclude-pre-releases \
-            --json tagName --jq '.[].tagName' | head -n 5 > /tmp/app-tags.txt
+          retry gh release list -R "$GITHUB_REPOSITORY" --limit 40 --exclude-drafts --exclude-pre-releases \
+            --json tagName --jq '.[].tagName' > /tmp/app-all.txt
+          head -n 5 /tmp/app-all.txt > /tmp/app-tags.txt
+          newest=1
           while read -r tag; do
             [ -n "$tag" ] || continue
-            # A tag from before the packages shipped has none to download;
-            # that is expected, not an error.
-            gh release download "$tag" -R "$GITHUB_REPOSITORY" --dir /tmp/pkgs \
-              --pattern '*.deb' --pattern '*.rpm' 2>/dev/null \
-              || echo "ssh-tool: no packages on $tag - skipping" >&2
+            want=$(retry gh release view "$tag" -R "$GITHUB_REPOSITORY" --json assets \
+              --jq '[.assets[].name | select(endswith(".deb") or endswith(".rpm"))] | length')
+            if [ "$want" -eq 0 ]; then
+              if [ "$newest" -eq 1 ]; then
+                echo "ssh-tool: the newest release $tag has no packages - not publishing" >&2
+                exit 1
+              fi
+              # A tag from before the packages shipped: expected.
+              echo "ssh-tool: no packages on $tag - skipping" >&2
+              continue
+            fi
+            d="/tmp/app/$tag"
+            mkdir -p "$d"
+            retry gh release download "$tag" -R "$GITHUB_REPOSITORY" --dir "$d" --clobber \
+              --pattern '*.deb' --pattern '*.rpm'
+            got=$(find "$d" -maxdepth 1 \( -name '*.deb' -o -name '*.rpm' \) | wc -l)
+            if [ "$got" -ne "$want" ]; then
+              echo "ssh-tool: $tag gave $got of $want packages - not publishing" >&2
+              exit 1
+            fi
+            cp "$d"/*.deb "$d"/*.rpm /tmp/pkgs/ 2>/dev/null || true
+            newest=0
           done < /tmp/app-tags.txt
-          # Never publish a repository without the app: an API hiccup that
-          # listed nothing would otherwise wipe gh-pages down to nothing.
           if ! ls /tmp/pkgs/ssh-tool_*.deb >/dev/null 2>&1 || ! ls /tmp/pkgs/ssh-tool-*.rpm >/dev/null 2>&1; then
             echo "no ssh-tool .deb / .rpm collected - not publishing" >&2
             exit 1
@@ -100,57 +126,84 @@ jobs:
       # The catalog's packages, gated by CATALOG_RELEASES_REPO. Everything
       # collected here is signed with this repository's key below, so a
       # release counts only when its SHA256SUMS carries a valid keyless
-      # cosign signature from the catalog's own tag pipeline
-      # (CATALOG_SIGNER, issuer gitlab.com) and the packages match it. A
-      # release that fails is skipped and logged, never fatal: the app's
-      # repository must not depend on it.
+      # cosign bundle from the catalog's own tag pipeline (CATALOG_SIGNER,
+      # issuer gitlab.com) and the packages match it; a release that fails
+      # that is skipped and logged.
+      #
+      # A failure that says nothing about the packages (cosign could not be
+      # installed, a request failed after retries) never drops them: the
+      # catalog packages now on gh-pages, verified when they got there, are
+      # carried over instead. If even those cannot be read, the job stops
+      # and gh-pages stays as it is.
       - name: Collect the catalog packages
         if: steps.gate.outputs.enabled == 'true' && vars.CATALOG_RELEASES_REPO != ''
         env:
           GH_TOKEN: ${{ github.token }}
           CATALOG_RELEASES_REPO: ${{ vars.CATALOG_RELEASES_REPO }}
           CATALOG_SIGNER: ${{ vars.CATALOG_SIGNER }}
+          COSIGN: ${{ steps.cosign.outcome }}
         run: |
           set -euo pipefail
           if [ -z "$CATALOG_SIGNER" ]; then
             echo "CATALOG_SIGNER not set - catalog packages are not collected." >&2
             exit 0
           fi
-          gh release list -R "$CATALOG_RELEASES_REPO" --limit 40 --exclude-drafts --exclude-pre-releases \
-            --json tagName --jq '.[].tagName' | head -n 5 > /tmp/cat-tags.txt || true
-          while read -r tag; do
-            [ -n "$tag" ] || continue
-            d="/tmp/cat/$tag"
-            mkdir -p "$d"
-            if ! gh release download "$tag" -R "$CATALOG_RELEASES_REPO" --dir "$d" \
-                --pattern 'SHA256SUMS' --pattern 'SHA256SUMS.sigstore.json' \
-                --pattern '*.deb' --pattern '*.rpm' 2>/dev/null; then
-              echo "ssh-tool-catalog: $tag could not be downloaded - skipping" >&2
-              continue
-            fi
-            if ! (cd "$d" && cosign verify-blob \
-                  --bundle SHA256SUMS.sigstore.json \
-                  --certificate-oidc-issuer https://gitlab.com \
-                  --certificate-identity-regexp "$CATALOG_SIGNER" SHA256SUMS >/dev/null 2>&1); then
-              echo "ssh-tool-catalog: $tag SHA256SUMS signature did not verify - skipping" >&2
-              continue
-            fi
-            if ! (cd "$d" && sha256sum -c --ignore-missing --strict SHA256SUMS); then
-              echo "ssh-tool-catalog: $tag packages do not match SHA256SUMS - skipping" >&2
-              continue
-            fi
-            # Only packages SHA256SUMS lists (a file it does not name was
-            # not covered by the signature).
-            awk '{ n = $2; sub(/^\*/, "", n); print n }' "$d/SHA256SUMS" > "$d/.listed"
-            for f in "$d"/*.deb "$d"/*.rpm; do
-              [ -e "$f" ] || continue
-              if grep -qxF "$(basename "$f")" "$d/.listed"; then
-                cp "$f" /tmp/pkgs/
-              else
-                echo "ssh-tool-catalog: $tag $(basename "$f") is not in SHA256SUMS - left out" >&2
+          retry() { local n=0; until "$@"; do n=$((n + 1)); [ "$n" -ge 3 ] && return 1; sleep $((n * 5)); done; }
+          carry=""
+          if [ "$COSIGN" != "success" ]; then
+            carry="cosign could not be installed"
+          elif ! retry gh release list -R "$CATALOG_RELEASES_REPO" --limit 40 --exclude-drafts --exclude-pre-releases \
+              --json tagName --jq '.[].tagName' > /tmp/cat-all.txt; then
+            carry="the release list could not be read"
+          else
+            head -n 5 /tmp/cat-all.txt > /tmp/cat-tags.txt
+            mkdir -p /tmp/catpkgs
+            while read -r tag; do
+              [ -n "$tag" ] || continue
+              d="/tmp/cat/$tag"
+              mkdir -p "$d"
+              if ! retry gh release download "$tag" -R "$CATALOG_RELEASES_REPO" --dir "$d" --clobber \
+                  --pattern 'SHA256SUMS' --pattern 'SHA256SUMS.sigstore.json' \
+                  --pattern '*.deb' --pattern '*.rpm'; then
+                carry="$tag could not be downloaded"
+                break
               fi
-            done
-          done < /tmp/cat-tags.txt
+              if ! (cd "$d" && cosign verify-blob \
+                    --bundle SHA256SUMS.sigstore.json \
+                    --certificate-oidc-issuer https://gitlab.com \
+                    --certificate-identity-regexp "$CATALOG_SIGNER" SHA256SUMS >/dev/null 2>&1); then
+                echo "ssh-tool-catalog: $tag SHA256SUMS signature did not verify - skipping" >&2
+                continue
+              fi
+              if ! (cd "$d" && sha256sum -c --ignore-missing --strict SHA256SUMS); then
+                echo "ssh-tool-catalog: $tag packages do not match SHA256SUMS - skipping" >&2
+                continue
+              fi
+              # Only packages SHA256SUMS lists (a file it does not name was
+              # not covered by the signature).
+              awk '{ n = $2; sub(/^\*/, "", n); print n }' "$d/SHA256SUMS" > "$d/.listed"
+              for f in "$d"/*.deb "$d"/*.rpm; do
+                [ -e "$f" ] || continue
+                if grep -qxF "$(basename "$f")" "$d/.listed"; then
+                  cp "$f" /tmp/catpkgs/
+                else
+                  echo "ssh-tool-catalog: $tag $(basename "$f") is not in SHA256SUMS - left out" >&2
+                fi
+              done
+            done < /tmp/cat-tags.txt
+          fi
+          if [ -n "$carry" ]; then
+            echo "ssh-tool-catalog: $carry - carrying over the catalog packages now on gh-pages" >&2
+            rm -rf /tmp/prev
+            git clone --depth 1 --branch gh-pages \
+              "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" /tmp/prev
+            rm -rf /tmp/catpkgs
+            mkdir -p /tmp/catpkgs
+            find /tmp/prev/deb/pool /tmp/prev/rpm -maxdepth 2 -type f \
+              \( -name 'ssh-tool-catalog_*.deb' -o -name 'ssh-tool-catalog-*.rpm' \) \
+              -exec cp {} /tmp/catpkgs/ \; 2>/dev/null || true
+          fi
+          cp /tmp/catpkgs/* /tmp/pkgs/ 2>/dev/null || true
           ls -la /tmp/pkgs
 
       - name: Import the signing key
@@ -233,10 +286,18 @@ jobs:
           fi
           sed "s|REPO_URL|${url}|g" "${GITHUB_WORKSPACE}/docs/repo-index.html" \
             > /tmp/pages/index.html
-          # The catalog section only while the repository holds its
-          # packages: before the gate opens it would point at nothing.
-          if ! ls /tmp/repo/deb/pool/main/ssh-tool-catalog_*.deb >/dev/null 2>&1; then
+          # The catalog's install lines only for what the repository
+          # holds: apt and dnf each on their own, the section only when
+          # either is there (before the gate opens it would point at
+          # nothing).
+          has_deb=0; has_rpm=0
+          ls /tmp/repo/deb/pool/main/ssh-tool-catalog_*.deb >/dev/null 2>&1 && has_deb=1
+          ls /tmp/repo/rpm/ssh-tool-catalog-*.rpm >/dev/null 2>&1 && has_rpm=1
+          if [ "$has_deb" -eq 0 ] && [ "$has_rpm" -eq 0 ]; then
             sed -i '/<!--CATALOG-->/,/<!--\/CATALOG-->/d' /tmp/pages/index.html
+          else
+            [ "$has_deb" -eq 1 ] || sed -i '/<!--CATALOG-DEB-->/,/<!--\/CATALOG-DEB-->/d' /tmp/pages/index.html
+            [ "$has_rpm" -eq 1 ] || sed -i '/<!--CATALOG-RPM-->/,/<!--\/CATALOG-RPM-->/d' /tmp/pages/index.html
           fi
 
           cd /tmp/pages
