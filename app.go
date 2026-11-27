@@ -667,21 +667,6 @@ func (a *App) initialise() {
 	}
 	log.Printf("store + vault ready")
 
-	// One-shot cleanup: earlier versions mirrored every per-secret Put
-	// into the OS keychain, which silently bypassed Lock(). The fallback
-	// is gone now; remove any leftover entries on this machine so a
-	// locked vault really is locked.
-	if v, ok, _ := a.db.GetSetting("keyring_legacy_purged_v1"); !ok || v != "1" {
-		if refs, err := a.db.ListCredentials(); err == nil {
-			ids := make([]string, 0, len(refs))
-			for _, r := range refs {
-				ids = append(ids, r.ID)
-			}
-			creds.PurgeLegacyKeyringEntries(ids)
-		}
-		_ = a.db.SetSetting("keyring_legacy_purged_v1", "1")
-	}
-
 	// Store is open now; let main.go restore the saved window geometry.
 	if a.onDBReady != nil {
 		a.onDBReady()

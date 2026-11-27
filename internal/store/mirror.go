@@ -237,7 +237,6 @@ var machineLocalSettings = []string{
 	"last_session_detached_v1",
 	"settings_active_section",
 	"recent_connections_count",
-	"keyring_legacy_purged_v1",
 	"app_log_tail_enabled",
 	"local_shell_dir",
 	"local_shell_kind",
