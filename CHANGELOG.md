@@ -20,6 +20,7 @@ while Wails v3 was a prerelease upstream.
 - A catalog behind such a profile no longer fails with a raw error on every background sync, and never asks: its state says the profile is in use on the other machine, and **Sync now** offers the take-over.
 
 ### Fixes
+- **Escape answers the LLM (MCP) approval dialogs with Deny**: the connect, run, type, download, facts and plan approvals left the keyboard with the terminal behind them, so Escape went to that session and the dialog stayed open. The dialog now takes the keyboard while it is open, with Deny focused.
 - **Credentials from Bitwarden / Vaultwarden, Infisical and KeePass made on your other machine work here**: server and database registrations stay on each machine while credentials travel with profile sync, so a credential made on one machine failed on the other with "server not found" or "database not found", even with the same server or file registered. The app now uses the registered server or database that holds the item.
 - **The log file is written again on Windows**: `%APPDATA%\ssh-tool\logs\app.log` stayed empty when the app was started normally (from the Start menu or a shortcut), because a failed write to the missing console stopped the line before it reached the file.
 

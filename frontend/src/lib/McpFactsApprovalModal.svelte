@@ -17,6 +17,7 @@
   // user sees every host (and can untick some), every fact and the exact
   // script; nothing connects before Approve.
   import { IconBot } from "./iconMap";
+  import { modalKeys } from "./modalKeys";
 
   interface Props {
     req: FactsApprovalRequest;
@@ -41,7 +42,7 @@
 </script>
 
 <div class="overlay" role="dialog" aria-modal="true">
-  <div class="modal">
+  <div class="modal" use:modalKeys={{ onEscape: () => onRespond(false, []) }}>
     <header>
       <span class="icon"><IconBot size={18} /></span>
       <h1>LLM wants to gather facts from {req.hosts.length} host{req.hosts.length === 1 ? "" : "s"}</h1>
@@ -82,7 +83,7 @@
     {#if showScript}<pre class="script">{req.script}</pre>{/if}
 
     <footer>
-      <button class="btn" onclick={() => onRespond(false, [])}>Deny</button>
+      <button class="btn" data-autofocus onclick={() => onRespond(false, [])}>Deny</button>
       <button class="btn primary" disabled={kept.length === 0} onclick={() => onRespond(true, kept)}>
         Gather from {kept.length} host{kept.length === 1 ? "" : "s"}
       </button>
