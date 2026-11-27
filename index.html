@@ -57,6 +57,20 @@ no <code>webkitgtk6.0</code> package at all, so this will not install
 there - the dependency is real and the package does not exist in that
 family.</p>
 
+<!--CATALOG-->
+<h2>Catalog server</h2>
+<p>The shared catalog server (<code>ssh-tool-catalog</code>) comes from
+the same repository: add it as above, then</p>
+<!--CATALOG-DEB-->
+<pre><code>sudo apt install ssh-tool-catalog   # Debian / Ubuntu</code></pre>
+<!--/CATALOG-DEB-->
+<!--CATALOG-RPM-->
+<pre><code>sudo dnf install ssh-tool-catalog   # Fedora, RHEL, Rocky, Alma</code></pre>
+<!--/CATALOG-RPM-->
+<p class="note">The catalog server is a single static binary with no
+desktop dependencies, so unlike the app it also installs on RHEL and its
+rebuilds (use the Fedora repository file above), on amd64 and arm64.</p>
+<!--/CATALOG-->
 
 <h2>Arch</h2>
 <p>There is no apt/dnf-style repository for Arch, but each release

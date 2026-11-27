@@ -1,0 +1,16 @@
+Package: ssh-tool-catalog
+Architecture: arm64
+Version: 0.1.0
+Priority: optional
+Section: net
+Maintainer: sshtool.app <108677346+fpenezic@users.noreply.github.com>
+Installed-Size: 15298
+Filename: pool/main/ssh-tool-catalog_0.1.0_arm64.deb
+Size: 6432682
+MD5sum: cbf13092b22d9a14078c52a558fc7079
+SHA1: dd24af60e47f82c3b616ff1ad7b656468df14925
+SHA256: 7eb0c67b1549f7ae28c10b349abfc82527f1a1f51f061efba3dbda72d089b184
+SHA512: 0e6a4eab51cae74af3b2c15863b29912c3138c85c9c5f20e0d51f229ff650c84ca11f7280bf505b0199faf67ca739219d8a13ce8da937882e7c688ee6d605580
+Homepage: https://sshtool.app
+Description: Team catalog of SSH connections for the ssh-tool desktop app.
+
