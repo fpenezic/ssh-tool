@@ -69,7 +69,8 @@ jobs:
         id: cosign
         if: steps.gate.outputs.enabled == 'true' && vars.CATALOG_RELEASES_REPO != ''
         continue-on-error: true
-        uses: sigstore/cosign-installer@v4
+        # Pinned by commit: a third-party action in a job that can push gh-pages.
+        uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
 
       # The app's packages: the release this run follows is published by
       # the time it runs (the publish job creates it, not as a draft), so
@@ -152,6 +153,11 @@ jobs:
           carry=""
           if [ "$COSIGN" != "success" ]; then
             carry="cosign could not be installed"
+          elif ! retry cosign initialize >/dev/null 2>&1; then
+            # The trust root (TUF) is fetched up front: with it in place, a
+            # failing verify-blob below is about the signature, not about
+            # reaching sigstore.
+            carry="the sigstore trust root could not be fetched"
           elif ! retry gh release list -R "$CATALOG_RELEASES_REPO" --limit 40 --exclude-drafts --exclude-pre-releases \
               --json tagName --jq '.[].tagName' > /tmp/cat-all.txt; then
             carry="the release list could not be read"
@@ -181,7 +187,7 @@ jobs:
               fi
               # Only packages SHA256SUMS lists (a file it does not name was
               # not covered by the signature).
-              awk '{ n = $2; sub(/^\*/, "", n); print n }' "$d/SHA256SUMS" > "$d/.listed"
+              awk '{ n = $2; sub(/^\*/, "", n); sub(/^\.\//, "", n); print n }' "$d/SHA256SUMS" > "$d/.listed"
               for f in "$d"/*.deb "$d"/*.rpm; do
                 [ -e "$f" ] || continue
                 if grep -qxF "$(basename "$f")" "$d/.listed"; then
