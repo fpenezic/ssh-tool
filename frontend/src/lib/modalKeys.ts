@@ -10,8 +10,12 @@
 //
 // Several dialogs can be open at once (a run, a facts and a plan approval
 // mount independently): only the most recently mounted one answers Escape
-// and traps Tab, so one key press never denies requests the user did not
-// look at. Closing it hands the keyboard back to the one below.
+// and traps Tab, and it is also drawn in front (its overlay's z-index
+// follows the stack), so one key press never answers a request the user
+// cannot see. Closing it hands the keyboard back to the one below.
+//
+// A different dialog above them (the Ctrl+K palette) keeps its own keys:
+// a key whose target sits in an overlay outside this stack is left alone.
 import { claimKeyboard } from "./paneFocus";
 
 export interface ModalKeysOptions {
@@ -24,10 +28,22 @@ interface Owner {
 }
 
 const stack: Owner[] = [];
+const BASE_Z = 100;
+
+function overlayOf(node: HTMLElement): HTMLElement {
+  return (node.closest(".overlay") as HTMLElement | null) ?? node;
+}
+
+// The key belongs to another dialog (e.g. the palette opened over an
+// approval) when its target is inside an overlay none of ours owns.
+function foreign(target: EventTarget | null): boolean {
+  const el = target instanceof Element ? target.closest(".overlay, [role='dialog']") : null;
+  return !!el && !stack.some((o) => overlayOf(o.node) === el || o.node.contains(el));
+}
 
 function onKey(e: KeyboardEvent) {
   const top = stack[stack.length - 1];
-  if (!top) return;
+  if (!top || foreign(e.target)) return;
   if (e.key === "Escape") {
     e.preventDefault();
     e.stopPropagation();
@@ -54,6 +70,7 @@ export function modalKeys(node: HTMLElement, opts: ModalKeysOptions) {
   const before = document.activeElement as HTMLElement | null;
   if (stack.length === 0) window.addEventListener("keydown", onKey, true);
   stack.push(owner);
+  overlayOf(node).style.zIndex = String(BASE_Z + stack.length);
   const t = setTimeout(() => focusSafe(node), 0);
 
   return {
