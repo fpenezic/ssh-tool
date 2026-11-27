@@ -10,7 +10,6 @@
 | `golang.org/x/crypto/ssh/agent` | Agent integration |
 | `golang.org/x/crypto/argon2` | Vault KDF (Argon2id, interactive params) |
 | `golang.org/x/crypto/chacha20poly1305` | Vault AEAD (XChaCha20-Poly1305) |
-| `github.com/zalando/go-keyring` | Purges legacy OS-keychain entries only - never a secret store (see `keyring_purge.go`) |
 | `github.com/openpubkey/openpubkey` | OpenPubkey OIDC client |
 | `github.com/openpubkey/opkssh` | opkssh cert issuance + verification (as a Go library, no external binary) |
 | `github.com/aymanbagabas/go-pty` | Cross-platform PTY (creak/pty on Unix, ConPTY on Windows) |

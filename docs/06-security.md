@@ -51,9 +51,9 @@ Earlier versions did mirror secrets into the OS keychain (Windows
 Credential Manager, macOS Keychain, Linux Secret Service). That was
 removed in v0.12.8: the OS keeps the keychain unlocked for the whole
 login session, so a *locked* vault still handed out secrets through
-the keyring path. `go-keyring` remains a dependency for exactly one
-job - purging those legacy entries (`internal/creds/keyring_purge.go`).
-Never reintroduce a keyring read path.
+the keyring path. The one-shot purge of those leftover entries ran
+until v1.3 and is gone with the `go-keyring` dependency (no public
+release ever wrote them). Never reintroduce a keyring read path.
 
 Auto-unlock is opt-in; disabling it requires the passphrase on
 every launch. Idle auto-lock is also configurable

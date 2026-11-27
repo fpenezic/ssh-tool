@@ -121,9 +121,9 @@ novel.
     effort" fallback. Because Windows / macOS keep the keychain
     unlocked for the entire user session, that meant Lock() was
     silently bypassed on every Get(). The keyring is fully gone
-    from `internal/creds/vault.go` and a one-shot purge runs on
-    startup (`keyring_legacy_purged_v1` settings flag) to delete
-    leftover entries under the legacy service name. Auto-unlock
+    from `internal/creds/vault.go`; the one-shot purge of leftover
+    entries (and the go-keyring dependency) was removed after v1.3,
+    since no public release ever wrote them. Auto-unlock
     sidecar (machine-bound file next to vault.enc) remains the
     only convenience path.
 
