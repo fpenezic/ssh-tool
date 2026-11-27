@@ -189,7 +189,7 @@
   }
 
   // Turn a backend upstream-open error into a short, user-facing message.
-  // The raw strings are like "vnc jump connect: jump dns.bipe.onl: ssh
+  // The raw strings are like "vnc jump connect: jump jump.example.com: ssh
   // handshake: ssh: handshake failed: ssh: unable to authenticate, ...".
   function prettyVncError(raw: string): string {
     const low = raw.toLowerCase();
