@@ -29,6 +29,9 @@ interface Owner {
 
 const stack: Owner[] = [];
 const BASE_Z = 100;
+// Where focus was before the first dialog opened; it goes back there when
+// the last one closes (dialogs replaced in between never become the target).
+let restoreTo: HTMLElement | null = null;
 
 function overlayOf(node: HTMLElement): HTMLElement {
   return (node.closest(".overlay") as HTMLElement | null) ?? node;
@@ -67,8 +70,10 @@ function focusSafe(node: HTMLElement) {
 export function modalKeys(node: HTMLElement, opts: ModalKeysOptions) {
   const owner: Owner = { node, opts };
   const release = claimKeyboard();
-  const before = document.activeElement as HTMLElement | null;
-  if (stack.length === 0) window.addEventListener("keydown", onKey, true);
+  if (stack.length === 0) {
+    restoreTo = document.activeElement as HTMLElement | null;
+    window.addEventListener("keydown", onKey, true);
+  }
   stack.push(owner);
   overlayOf(node).style.zIndex = String(BASE_Z + stack.length);
   const t = setTimeout(() => focusSafe(node), 0);
@@ -83,7 +88,10 @@ export function modalKeys(node: HTMLElement, opts: ModalKeysOptions) {
       if (stack.length === 0) window.removeEventListener("keydown", onKey, true);
       release();
       if (wasTop && stack.length > 0) focusSafe(stack[stack.length - 1].node);
-      else if (stack.length === 0) before?.focus?.();
+      else if (stack.length === 0) {
+        if (restoreTo?.isConnected) restoreTo.focus?.();
+        restoreTo = null;
+      }
     },
   };
 }
