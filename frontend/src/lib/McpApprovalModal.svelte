@@ -6,6 +6,7 @@
   // download_file wanting to write a remote file to the local disk.
   import { IconBot, IconInfo } from "./iconMap";
   import type { McpDecision } from "./api";
+  import { modalKeys } from "./modalKeys";
 
   interface Props {
     sessionName: string;
@@ -25,7 +26,7 @@
 </script>
 
 <div class="overlay" role="dialog" aria-modal="true">
-  <div class="modal">
+  <div class="modal" use:modalKeys={{ onEscape: () => onRespond("deny") }}>
     <header>
       <span class="icon"><IconBot size={18} /></span>
       <h1>LLM wants to {title}</h1>
@@ -81,7 +82,7 @@
     {/if}
 
     <div class="row">
-      <button onclick={() => onRespond("deny")}>Deny</button>
+      <button data-autofocus onclick={() => onRespond("deny")}>Deny</button>
       {#if kind === "run"}
         <button class="primary" onclick={() => onRespond("run")}>Run command</button>
       {:else if kind === "file"}

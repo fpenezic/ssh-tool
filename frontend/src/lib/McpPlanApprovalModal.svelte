@@ -6,6 +6,7 @@
   // never sets or sees secrets. Approve writes everything in one transaction;
   // reject discards the plan.
   import { IconBot } from "./iconMap";
+  import { modalKeys } from "./modalKeys";
   import Icon from "./Icon.svelte";
 
   // Mirrors the Go McpPlanPreview payload (event: mcp_plan_approval_request).
@@ -93,7 +94,7 @@
 </script>
 
 <div class="overlay" role="dialog" aria-modal="true">
-  <div class="modal">
+  <div class="modal" use:modalKeys={{ onEscape: () => onRespond("deny") }}>
     <header>
       <span class="icon"><IconBot size={18} /></span>
       <h1>{title}</h1>
@@ -185,7 +186,7 @@
     </div>
 
     <div class="row">
-      <button onclick={() => onRespond("deny")}>Reject</button>
+      <button data-autofocus onclick={() => onRespond("deny")}>Reject</button>
       <button class="primary" onclick={() => onRespond("run")}>{approveLabel}</button>
     </div>
   </div>
